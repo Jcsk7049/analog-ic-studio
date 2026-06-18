@@ -64,6 +64,7 @@ pip install numpy pandas scipy scikit-learn torch matplotlib flask rich
 `eda_control` 會找 `pdk/sky130_fd_pr/cells/{nfet_01v8,pfet_01v8,pfet_01v8_hvt,pnp_05v5}/`
 下的 `*__tt.corner.spice` 與 `*__tt.pm3.spice`，以及
 `pdk/sky130_fd_pr/models/parameters/invariant.spice`。
+（**PVT 三溫掃描**另需 nfet/pfet/pfet_hvt 的 `*__ff.*` 與 `*__ss.*` 角落檔。）
 皆下載自 [google/skywater-pdk-libs-sky130_fd_pr](https://github.com/google/skywater-pdk-libs-sky130_fd_pr)（Apache-2.0）。
 
 > 只需「快速模型」(Level-1) 的話不必裝 sky130；OPA/Bandgap/RingOsc 的快速模式可獨立運作。

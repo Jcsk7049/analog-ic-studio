@@ -1,7 +1,7 @@
 * 精簡版 sky130 模型庫: nfet_01v8 / pfet_01v8 / pfet_01v8_hvt
 * 來源: google/skywater-pdk-libs-sky130_fd_pr (Apache-2.0)
-* 含 tt / ff / ss 三製程角落, 供 PVT 掃描
-* 用法: .lib "pdk/sky130_minimal.lib.spice" tt   (或 ff / ss)
+* 支援三製程角落 (PVT 用): tt (typical) / ff (fast) / ss (slow)
+* 用法: .lib "pdk/sky130_minimal.lib.spice" tt|ff|ss
 
 .lib tt
 .include "sky130_fd_pr/models/parameters/invariant.spice"
