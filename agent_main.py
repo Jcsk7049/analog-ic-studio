@@ -239,9 +239,13 @@ def compute_multi_influence(circuit, params):
 
 def run_optimization(circuit, target=None, p0=None, engine="auto"):
     """引擎分派: VCO -> Scipy 混合; sky130 -> DNN 群體尋優; 否則傳統 ngspice 閉環。"""
-    if CIRCUITS[circuit].get("optimizer") == "vco_hybrid":
+    _opt = CIRCUITS[circuit].get("optimizer")
+    if _opt == "vco_hybrid":
         import optimizer
         return optimizer.run_vco_optimization(circuit, target)   # 已含 multi_influence
+    if _opt == "multivar":
+        import optimizer
+        return optimizer.run_multivar(circuit, target)           # 通用多變量 DE
     if engine == "surrogate" or (engine == "auto" and _use_surrogate(circuit)):
         try:
             res = run_optimization_surrogate(circuit, target)

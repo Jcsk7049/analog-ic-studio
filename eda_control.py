@@ -102,29 +102,107 @@ def _parse_ringosc(log):
 #   ranges      : 優化搜尋範圍 (SI: 公尺 / 歐姆 / 個數)
 #   params      : 顯示用 (標籤, 單位, 換算倍率)
 # ----------------------------------------------------------------------
+def _vco_config():
+    """建構 VCO 的 14 個獨立 W/L 參數設定 (6 反相器 MOS + 1 偏壓群)。"""
+    # (placeholder 後綴, 顯示元件名, 型別)
+    inv = [("M0p", "M0_p", "p"), ("M0n", "M0_n", "n"),
+           ("M1p", "M1_p", "p"), ("M1n", "M1_n", "n"),
+           ("M2p", "M2_p", "p"), ("M2n", "M2_n", "n")]
+    keys, ph, rng, params = [], {}, {}, {}
+    for suf, dev, _typ in inv:
+        wk, lk = f"W_{suf}", f"L_{suf}"
+        keys += [wk, lk]
+        ph[wk] = "{W_" + suf + "}"; ph[lk] = "{L_" + suf + "}"
+        rng[wk] = (0.5e-6, 12e-6); rng[lk] = (0.15e-6, 0.5e-6)
+        params[wk] = {"label": f"{dev} W", "device": dev, "dim": "W",
+                      "unit": "µm", "scale": 1e6, "net_scale": 1e6, "fmt": "{:.2f}"}
+        params[lk] = {"label": f"{dev} L", "device": dev, "dim": "L",
+                      "unit": "µm", "scale": 1e6, "net_scale": 1e6, "fmt": "{:.3f}"}
+    # 偏壓 + 尾電流鏡群 (共用一組 W/L)
+    keys += ["W_Mbias", "L_Mbias"]
+    ph["W_Mbias"] = "{W_Mbias}"; ph["L_Mbias"] = "{L_Mbias}"
+    rng["W_Mbias"] = (4e-6, 50e-6); rng["L_Mbias"] = (0.15e-6, 0.6e-6)
+    params["W_Mbias"] = {"label": "M_bias W", "device": "M_bias", "dim": "W",
+                         "unit": "µm", "scale": 1e6, "net_scale": 1e6, "fmt": "{:.2f}"}
+    params["L_Mbias"] = {"label": "M_bias L", "device": "M_bias", "dim": "L",
+                         "unit": "µm", "scale": 1e6, "net_scale": 1e6, "fmt": "{:.3f}"}
+    start = {}
+    for suf, _dev, typ in inv:
+        start[f"W_{suf}"] = 4e-6 if typ == "p" else 2e-6
+        start[f"L_{suf}"] = 0.15e-6
+    start["W_Mbias"] = 8e-6; start["L_Mbias"] = 0.5e-6
+    return keys, ph, rng, params, start
+
+
+_VCO_KEYS, _VCO_PH, _VCO_RNG, _VCO_PARAMS, _VCO_START = _vco_config()
+
+
+def _wl(suf, dev, wr, lr, w0, l0):
+    """產生一組 W/L 參數設定 (device 分組供前端雙欄表)。回傳 (keys, ph, rng, params, start)。"""
+    wk, lk = f"W_{suf}", f"L_{suf}"
+    ph = {wk: "{W_" + suf + "}", lk: "{L_" + suf + "}"}
+    rng = {wk: wr, lk: lr}
+    params = {
+        wk: {"label": f"{dev} W", "device": dev, "dim": "W", "unit": "µm",
+             "scale": 1e6, "net_scale": 1, "fmt": "{:.2f}"},
+        lk: {"label": f"{dev} L", "device": dev, "dim": "L", "unit": "µm",
+             "scale": 1e6, "net_scale": 1, "fmt": "{:.3f}"},
+    }
+    return [wk, lk], ph, rng, params, {wk: w0, lk: l0}
+
+
+def _scalar(key, dev, ph_tok, rng, scale, fmt, v0):
+    """單一純量參數 (電容/電阻/個數) 也走 device/dim=W 表格 (單位內含於 fmt)。"""
+    return ([key], {key: ph_tok}, {key: rng},
+            {key: {"label": dev, "device": dev, "dim": "W", "unit": "",
+                   "scale": scale, "net_scale": 1, "fmt": fmt}}, {key: v0})
+
+
+def _merge(*cfgs):
+    keys, ph, rng, params, start = [], {}, {}, {}, {}
+    for k, p, r, pa, s in cfgs:
+        keys += k; ph.update(p); rng.update(r); params.update(pa); start.update(s)
+    return keys, ph, rng, params, start
+
+
+# OPA: 4 組 MOS (M1/2, M3/4, M5/7/8 鏡像, M6) + 米勒電容 + 零點電阻
+_OPA_KEYS, _OPA_PH, _OPA_RNG, _OPA_PARAMS, _OPA_START = _merge(
+    _wl("M1", "M1,M2",    (2e-6, 80e-6), (0.35e-6, 2e-6), 10e-6, 1e-6),
+    _wl("M3", "M3,M4",    (2e-6, 80e-6), (0.35e-6, 2e-6), 20e-6, 1e-6),
+    _wl("M5", "M5,M7,M8", (2e-6, 80e-6), (0.35e-6, 2e-6), 20e-6, 1e-6),
+    _wl("M6", "M6",       (2e-6, 120e-6), (0.35e-6, 2e-6), 40e-6, 1e-6),
+    _scalar("C_miller", "Cc", "{C_miller}", (0.5e-12, 6e-12), 1e12, "{:.2f}pF", 2e-12),
+    _scalar("R_zero", "Rz", "{R_zero}", (50.0, 5e3), 1, "{:.0f}ohm", 1e3),
+)
+
+# Bandgap: PMOS 電流鏡 (L>=0.5u 抑制失配) + PTAT 電阻 + BJT 面積比
+_BG_KEYS, _BG_PH, _BG_RNG, _BG_PARAMS, _BG_START = _merge(
+    _wl("Pmirror", "MP1,MP2,MP3", (10e-6, 100e-6), (0.5e-6, 3e-6), 50e-6, 2e-6),
+    _scalar("R_trim", "R1", "{R_trim}", (4e3, 20e3), 1e-3, "{:.2f}kohm", 9e3),
+    _scalar("N_bjt", "Q2", "{N_bjt}", (2.0, 24.0), 1, "{:.0f}x", 8.0),
+)
+
+
 CIRCUITS = {
     "opa": {
         "label": "兩級 OPA",
         "family": "opa", "model": "fast",
         "template": "two_stage_opa.sp.template",
-        "param_keys": ["w_diff", "w_stage2", "r_bias"],
-        "placeholders": {"w_diff": "{W_diff}", "w_stage2": "{W_stage2}", "r_bias": "{R_bias}"},
-        "ranges": {"w_diff": (5e-6, 100e-6), "w_stage2": (20e-6, 200e-6), "r_bias": (20e3, 500e3)},
-        "params": {
-            "w_diff":   {"label": "W_diff (差動對)",  "unit": "µm", "scale": 1e6, "fmt": "{:.2f}"},
-            "w_stage2": {"label": "W_stage2 (第二級)", "unit": "µm", "scale": 1e6, "fmt": "{:.2f}"},
-            "r_bias":   {"label": "R_bias (偏壓阻)",   "unit": "kΩ", "scale": 1e-3, "fmt": "{:.2f}"},
-        },
+        "param_keys": _OPA_KEYS,
+        "placeholders": _OPA_PH,
+        "ranges": _OPA_RNG,
+        "params": _OPA_PARAMS,
         "parser": _parse_opa,
         "dump": "wrdata wave.txt vdb(out) vp(out)",
         "objective": "target",            # 逼近目標
         "metric": "gain",
         "pm_constraint": True,            # 約束 PM >= 45°
+        "optimizer": "multivar",          # 多變量 DE + 局部
         "target_label": "目標增益 (dB)",
         "target_unit": "dB",
         "target_scale": 1.0,              # 使用者目標 -> metric 原生單位 (dB=dB)
         "target_default": 60.0,
-        "start": {"w_diff": 30e-6, "w_stage2": 80e-6, "r_bias": 80e3},
+        "start": _OPA_START,
         "waveform": "bode",
     },
     "opa_sky130": {
@@ -156,13 +234,11 @@ CIRCUITS = {
         "label": "高精度 Bandgap",
         "family": "bandgap", "model": "fast",
         "template": "bandgap_reference.sp.template",
-        "param_keys": ["r_trim", "n_bjt"],
-        "placeholders": {"r_trim": "{R_trim}", "n_bjt": "{N_bjt}"},
-        "ranges": {"r_trim": (4e3, 40e3), "n_bjt": (2, 24)},
-        "params": {
-            "r_trim": {"label": "R_trim (PTAT 電阻)", "unit": "kΩ", "scale": 1e-3, "fmt": "{:.2f}"},
-            "n_bjt":  {"label": "N_bjt (BJT 面積比)", "unit": "x",  "scale": 1,    "fmt": "{:.1f}"},
-        },
+        "param_keys": _BG_KEYS,
+        "placeholders": _BG_PH,
+        "ranges": _BG_RNG,
+        "params": _BG_PARAMS,
+        "optimizer": "multivar",
         "parser": _parse_bandgap,
         "dump": "wrdata wave.txt v(vref)",
         "objective": "minimize",          # 最小化 TC
@@ -171,7 +247,7 @@ CIRCUITS = {
         "target_unit": "ppm/°C",
         "target_scale": 1.0,
         "target_default": 0.0,
-        "start": {"r_trim": 10e3, "n_bjt": 8},
+        "start": _BG_START,
         "waveform": "temp",
     },
     "bandgap_sky130": {
@@ -219,26 +295,24 @@ CIRCUITS = {
         "waveform": "wave",
     },
     "ringosc_sky130": {
-        # sky130 精準模式 = 真實電流飢餓型環形 VCO (固定振盪鏈尺寸, 只調控制電壓 Vctrl)
+        # sky130 精準 = 實體化電流飢餓環形 VCO; 每顆 MOS 獨立 W/L (14 變數), Vctrl 固定 1.8V
         "label": "VCO · sky130 精準",
         "family": "ringosc", "model": "sky130",
         "template": "vco_sky130.sp.template",
-        "param_keys": ["vctrl"],
-        "placeholders": {"vctrl": "{Vctrl_val}"},
-        "ranges": {"vctrl": (0.2, 1.8)},
-        "params": {
-            "vctrl": {"label": "Vctrl (控制電壓)", "unit": "V", "scale": 1, "fmt": "{:.4f}"},
-        },
+        "param_keys": _VCO_KEYS,
+        "placeholders": _VCO_PH,
+        "ranges": _VCO_RNG,
+        "params": _VCO_PARAMS,
         "parser": _parse_ringosc,
         "dump": "wrdata wave.txt v(Vout)",
         "objective": "target",
         "metric": "freq",
-        "optimizer": "vco_hybrid",          # 用 Scipy 混合策略 (DE 全域 + 局部精調)
+        "optimizer": "vco_hybrid",          # Scipy 多變量 DE + 局部精調
         "target_label": "目標頻率 (GHz)",
         "target_unit": "GHz",
         "target_scale": 1e9,
-        "target_default": 1.8,
-        "start": {"vctrl": 1.0},
+        "target_default": 3.0,
+        "start": _VCO_START,
         "waveform": "wave",
     },
 }

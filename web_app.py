@@ -209,14 +209,24 @@ def api_optimize():
     wave = eda.run_waveform(circuit, fin["params"])
     result["chart_png"] = make_chart(circuit, wave, fin["metrics"])
 
-    # KiCad 參數對照
-    rows = []
-    for k in c["param_keys"]:
-        pv = c["params"][k]; ref, role = KICAD_MAP[circuit][k]
-        val = pv["fmt"].format(fin["params"][k] * pv["scale"])
-        rows.append({"ref": ref, "role": role, "key": k,
-                     "value": f"{val}{pv['unit']}", "label": pv["label"]})
-    result["kicad"] = rows
+    # KiCad 參數對照: VCO (params 含 device/dim) -> 每顆 MOS 的 W/L 雙欄表; 其餘 -> ref/role 列
+    if any("device" in v for v in c["params"].values()):
+        devs = {}
+        for k in c["param_keys"]:
+            pv = c["params"][k]
+            v = pv["fmt"].format(fin["params"][k] * pv["scale"])
+            devs.setdefault(pv["device"], {})[pv["dim"]] = v
+        order = list(dict.fromkeys(c["params"][k]["device"] for k in c["param_keys"]))
+        result["wl_table"] = [{"device": d, "W": devs[d].get("W", "—"),
+                               "L": devs[d].get("L", "—")} for d in order]
+    else:
+        rows = []
+        for k in c["param_keys"]:
+            pv = c["params"][k]; ref, role = KICAD_MAP[circuit][k]
+            val = pv["fmt"].format(fin["params"][k] * pv["scale"])
+            rows.append({"ref": ref, "role": role, "key": k,
+                         "value": f"{val}{pv['unit']}", "label": pv["label"]})
+        result["kicad"] = rows
     result["params_meta"] = {k: {"label": c["params"][k]["label"],
                                  "unit": c["params"][k]["unit"],
                                  "scale": c["params"][k]["scale"],
@@ -287,11 +297,21 @@ def api_pareto():
     target = float(target) if target is not None else None
 
     r = pareto.pareto_packages(circuit, target)
+    has_dev = any("device" in v for v in c["params"].values())
     for pk in r["packages"]:
         p = pk["params"]
-        pk["kicad"] = [{"ref": KICAD_MAP[circuit][k][0], "role": KICAD_MAP[circuit][k][1],
-                        "value": f"{c['params'][k]['fmt'].format(p[k]*c['params'][k]['scale'])}{c['params'][k]['unit']}"}
-                       for k in c["param_keys"]]
+        if has_dev:                                     # 實體化電路 -> 每顆 MOS W/L 雙欄
+            devs = {}
+            for k in c["param_keys"]:
+                pv = c["params"][k]
+                devs.setdefault(pv["device"], {})[pv["dim"]] = pv["fmt"].format(p[k] * pv["scale"])
+            order = list(dict.fromkeys(c["params"][k]["device"] for k in c["param_keys"]))
+            pk["wl_table"] = [{"device": d, "W": devs[d].get("W", "—"),
+                               "L": devs[d].get("L", "—")} for d in order]
+        else:
+            pk["kicad"] = [{"ref": KICAD_MAP[circuit][k][0], "role": KICAD_MAP[circuit][k][1],
+                            "value": f"{c['params'][k]['fmt'].format(p[k]*c['params'][k]['scale'])}{c['params'][k]['unit']}"}
+                           for k in c["param_keys"]]
         try:
             pk["multi_influence"] = agent.compute_multi_influence(circuit, p)
         except Exception:

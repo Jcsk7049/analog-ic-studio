@@ -1,60 +1,54 @@
 * ============================================================
-*  Current-Starved 3-Stage Ring VCO  (SkyWater sky130, 1.8V)
-*  反向工程自真實原理圖:
-*    - 控制偏置區: M7 (Vctrl V->I) / N34 (diode) / M11,M12 (PMOS 鏡像) -> Vbn
-*    - 核心振盪區: 3 級反相器 (PMOS M0/M2/M4 上, NMOS M1/M3/M5 下)
-*    - 底部電流控制管: M28/M27/M32 (NMOS 飢餓尾電流, gate=Vbn)
-*  Vctrl 上升 -> 偏置電流上升 -> 各級延遲縮短 -> 振盪頻率上升
+*  Current-Starved 3-Stage Ring VCO — 實體化版 (SkyWater sky130, 1.8V)
+*  每一顆 MOS 實例擁有獨立的 W / L 引數 (對接 KiCad 真實畫布):
+*    第一級: XM0_p/XM0_n   第二級: XM1_p/XM1_n   第三級: XM2_p/XM2_n
+*    偏壓+尾電流鏡 (M7/M11/M12/N34/M28/M27/M32): 共用 W_Mbias / L_Mbias
+*  高頻物理: L 壓到製程極限 0.15µm 最小化寄生電容; W 過大會 self-loading 反變慢
+*  Vctrl 固定 1.8V (最大驅動電流), 由 W/L 尋優決定振盪頻率
 *
-*  模型: NMOS = sky130_fd_pr__nfet_01v8 ; PMOS = sky130_fd_pr__pfet_01v8_hvt
-*  可調引數: {Vctrl_val}  (控制電壓, 0.2 ~ 1.8 V)
-*  量測輸出: clk_freq (Vout 振盪頻率, Hz)
-*
-*  注意: 第一行必須是標題/註解, .option scale 不可置於第一行 (會被當標題)
+*  注意: 第一行必為標題/註解, .option scale 不可置首行 (會被當標題)
 * ============================================================
 .option scale=1u
 .lib "pdk/sky130_minimal.lib.spice" tt
 
 Vdd   vdd 0 1.8
-Vctrl ctrl 0 {Vctrl_val}
+Vctrl ctrl 0 1.8
 
-* ---------- 控制偏置區: Vctrl -> Vbn (nbn) ----------
-XM7  pbias ctrl  0   0   sky130_fd_pr__nfet_01v8      L=0.5 W=1   ; V->I (Vctrl 控制電流)
-XM11 pbias pbias vdd vdd sky130_fd_pr__pfet_01v8_hvt  L=0.5 W=2   ; 二極體 PMOS
-XM12 nbn   pbias vdd vdd sky130_fd_pr__pfet_01v8_hvt  L=0.5 W=2   ; PMOS 鏡像
-XN34 nbn   nbn   0   0   sky130_fd_pr__nfet_01v8      L=0.5 W=2   ; 二極體 NMOS -> Vbn
+* ---------- 偏壓 + 尾電流鏡 (共用 W_Mbias / L_Mbias, 確保鏡像匹配) ----------
+XM7  pbias ctrl  0   0   sky130_fd_pr__nfet_01v8      L={L_Mbias} W={W_Mbias}
+XM11 pbias pbias vdd vdd sky130_fd_pr__pfet_01v8_hvt  L={L_Mbias} W={W_Mbias}
+XM12 nbn   pbias vdd vdd sky130_fd_pr__pfet_01v8_hvt  L={L_Mbias} W={W_Mbias}
+XN34 nbn   nbn   0   0   sky130_fd_pr__nfet_01v8      L={L_Mbias} W={W_Mbias}
 
-* ---------- 核心: 3 級電流飢餓反相器環 (PMOS 上拉直接接 vdd) ----------
-* 第 1 級 (M0 上 / M1 下 / M28 尾)
-XM0  o1   Vout vdd vdd  sky130_fd_pr__pfet_01v8_hvt  L=0.15 W=2
-XM1  o1   Vout s1  0    sky130_fd_pr__nfet_01v8      L=0.15 W=1
-XM28 s1   nbn  0   0    sky130_fd_pr__nfet_01v8      L=0.5  W=2
-* 第 2 級 (M2 / M3 / M27)
-XM2  o2   o1   vdd vdd  sky130_fd_pr__pfet_01v8_hvt  L=0.15 W=2
-XM3  o2   o1   s2  0    sky130_fd_pr__nfet_01v8      L=0.15 W=1
-XM27 s2   nbn  0   0    sky130_fd_pr__nfet_01v8      L=0.5  W=2
-* 第 3 級 (M4 / M5 / M32) -> 輸出 Vout
-XM4  Vout o2   vdd vdd  sky130_fd_pr__pfet_01v8_hvt  L=0.15 W=2
-XM5  Vout o2   s3  0    sky130_fd_pr__nfet_01v8      L=0.15 W=1
-XM32 s3   nbn  0   0    sky130_fd_pr__nfet_01v8      L=0.5  W=2
+* ---------- 第一級反相器 (XM0_p 上拉 / XM0_n 下拉 / XM28 尾) ----------
+XM0_p o1 Vout vdd vdd sky130_fd_pr__pfet_01v8_hvt L={L_M0p} W={W_M0p}
+XM0_n o1 Vout s1  0   sky130_fd_pr__nfet_01v8     L={L_M0n} W={W_M0n}
+XM28  s1 nbn  0   0   sky130_fd_pr__nfet_01v8     L={L_Mbias} W={W_Mbias}
 
-* 各級負載電容 (決定延遲/頻率)
-Cl1 o1   0 0.3f
-Cl2 o2   0 0.3f
-Cl3 Vout 0 0.3f
+* ---------- 第二級反相器 (XM1_p / XM1_n / XM27 尾) ----------
+XM1_p o2 o1 vdd vdd sky130_fd_pr__pfet_01v8_hvt L={L_M1p} W={W_M1p}
+XM1_n o2 o1 s2  0   sky130_fd_pr__nfet_01v8     L={L_M1n} W={W_M1n}
+XM27  s2 nbn 0   0   sky130_fd_pr__nfet_01v8     L={L_Mbias} W={W_Mbias}
 
-.ic v(o1)=0 v(o2)=1.8 v(Vout)=0    ; 初始不平衡以啟振
+* ---------- 第三級反相器 (XM2_p / XM2_n / XM32 尾) -> 輸出 Vout ----------
+XM2_p Vout o2 vdd vdd sky130_fd_pr__pfet_01v8_hvt L={L_M2p} W={W_M2p}
+XM2_n Vout o2 s3  0   sky130_fd_pr__nfet_01v8     L={L_M2n} W={W_M2n}
+XM32  s3 nbn  0   0   sky130_fd_pr__nfet_01v8     L={L_Mbias} W={W_Mbias}
 
-* ============================================================
-*  瞬態分析與頻率量測
-* ============================================================
+* 各級寄生負載 (近似佈線寄生; 主要延遲來自閘極電容與尾電流)
+Cl1 o1   0 0.02f
+Cl2 o2   0 0.02f
+Cl3 Vout 0 0.02f
+
+.ic v(o1)=0 v(o2)=1.8 v(Vout)=0
+
 .tran 0.01n 40n
 
 .control
-  tran 0.01n 40n uic
-  meas tran t1 when v(Vout)=0.9 td=12n rise=1
-  meas tran t2 when v(Vout)=0.9 td=12n rise=4
-  let clk_freq = 3 / (t2 - t1)          ; 3 個週期平均
+  tran 0.002n 20n uic
+  meas tran t1 when v(Vout)=0.9 td=6n rise=1
+  meas tran t2 when v(Vout)=0.9 td=6n rise=6
+  let clk_freq = 5 / (t2 - t1)
   let freq = clk_freq
   print freq
 

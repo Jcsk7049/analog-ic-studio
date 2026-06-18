@@ -14,9 +14,9 @@
 Vdd vdd 0 3.3
 
 * --- PMOS 等比電流鏡 (3 支路同流) ---
-MP1 n1   g vdd vdd PMOS_BG W=50u L=2u
-MP2 n2   g vdd vdd PMOS_BG W=50u L=2u
-MP3 vref g vdd vdd PMOS_BG W=50u L=2u
+MP1 n1   g vdd vdd PMOS_BG W={W_Pmirror} L={L_Pmirror}
+MP2 n2   g vdd vdd PMOS_BG W={W_Pmirror} L={L_Pmirror}
+MP3 vref g vdd vdd PMOS_BG W={W_Pmirror} L={L_Pmirror}
 
 * --- 理想運算放大器: 強制 V(n1)=V(n2), 輸出驅動鏡像閘極 ---
 *     負回授: n1>n2 -> g 下降 -> 鏡像電流上升 -> n2 追上

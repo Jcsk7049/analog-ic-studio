@@ -1,98 +1,42 @@
-* ============================================================
-*  Two-Stage CMOS Operational Amplifier (Miller-compensated)
-*  Open-loop AC test bench for Ngspice 46
-*
-*  可調參數 (由 eda_control.py 以字串替換填入):
-*    {W_diff}    -> 差動對 M1/M2 寬度    (例 40u)
-*    {W_stage2}  -> 第二級放大管 M6 寬度  (例 80u)
-*    {R_bias}    -> 偏壓電阻             (例 50k, 決定整體偏置電流)
-*
-*  量測輸出 (印在 stdout, 由 Python 解析):
-*    gain (dB)   開迴路直流/最大增益
-*    ugf  (Hz)   單位增益頻率 (0 dB 交越)
-*    pm   (deg)  相位裕度
-* ============================================================
-
-.title Two-Stage CMOS OPA
-
-* ---------- 全域參數 ----------
+.title Two-Stage CMOS OPA (instance-level W/L)
 .param VDD_V = 3.3
-.param VCM_V = 1.65          ; 共模 / 輸入直流偏壓
-
-* ---------- 電源 ----------
+.param VCM_V = 1.65
 Vdd  vdd  0   DC {VDD_V}
 Vss  vss  0   DC 0
-
-* ============================================================
-*  開迴路 AC 量測台 (test harness)
-*  - 訊號注入到 inn (對 out 為非反相), DC 偏在 VCM
-*  - 回授接到反相輸入 inp:
-*       Rfb 在 DC 提供回授路徑 -> inp = out (負回授把 out 穩在中點 VCM)
-*       Rfb 高阻 + CF 在 AC 把 inp 接地 -> 迴路斷開, 量到開迴路增益
-* ============================================================
 Vsig inn  0   DC {VCM_V} AC 1
-Rfb  out  inp 1G            ; 1e9 ohm : DC 回授, AC 幾乎斷開
-CF   inp  0   1            ; 1 F     : AC 短路接地, DC 開路
-
-* ============================================================
-*  運算放大器本體
-* ============================================================
-* --- 第一級: NMOS 差動對 + PMOS 電流鏡負載 ---
-M1  d1   inp  ntail vss  NMOS_GEN  W={W_diff}  L=1u   ; 反相輸入側
-M2  d2   inn  ntail vss  NMOS_GEN  W={W_diff}  L=1u   ; 非反相輸入側 -> 第二級
-M3  d1   d1   vdd   vdd  PMOS_GEN  W=30u       L=1u   ; 二極體接法鏡像
-M4  d2   d1   vdd   vdd  PMOS_GEN  W=30u       L=1u   ; 鏡像輸出 = 第一級輸出 d2
-
-* --- 尾電流源 (鏡像自偏壓支路) ---
-M5  ntail nbias vss vss  NMOS_GEN  W=50u       L=1u
-
-* --- 第二級: PMOS 共源放大 + NMOS 電流源負載 ---
-M6  out  d2    vdd  vdd  PMOS_GEN  W={W_stage2} L=1u  ; 第二級增益管
-M7  out  nbias vss  vss  NMOS_GEN  W=100u      L=1u   ; 主動負載電流源
-
-* --- 偏壓支路: R_bias 設定基準電流, M8 二極體接法 ---
-Rbias vdd  nbias  {R_bias}
-M8    nbias nbias vss vss NMOS_GEN W=10u       L=1u
-
-* --- 米勒補償電容 (out 與第一級輸出 d2 之間) ---
-Cc   out  d2   2p
-
-* --- 輸出負載 ---
+Rfb  out  inp 1G
+CF   inp  0   1
+* --- 差動對 M1/M2 ---
+M1  d1   inp  ntail vss  NMOS_GEN  W={W_M1} L={L_M1}
+M2  d2   inn  ntail vss  NMOS_GEN  W={W_M1} L={L_M1}
+* --- 第一級 PMOS 電流鏡負載 M3/M4 ---
+M3  d1   d1   vdd   vdd  PMOS_GEN  W={W_M3} L={L_M3}
+M4  d2   d1   vdd   vdd  PMOS_GEN  W={W_M3} L={L_M3}
+* --- NMOS 電流鏡 M5(尾)/M7(二級負載)/M8(偏置二極體) 共用尺寸 (匹配) ---
+M5  ntail nbias vss vss  NMOS_GEN  W={W_M5} L={L_M5}
+M7  out  nbias vss  vss  NMOS_GEN  W={W_M5} L={L_M5}
+M8  nbias nbias vss vss  NMOS_GEN  W={W_M5} L={L_M5}
+* --- 第二級共源放大管 M6 ---
+M6  out  d2    vdd  vdd  PMOS_GEN  W={W_M6} L={L_M6}
+Rbias vdd  nbias  120k
+* --- 米勒補償 Cc + 零點電阻 Rz (out -> nz -> d2) ---
+Cc   out  nz   {C_miller}
+Rz   nz   d2   {R_zero}
 CL   out  0    5p
-
-* ============================================================
-*  通用 Level-1 MOS 模型 (示範用, 非製程 PDK)
-*  LAMBDA 提供有限輸出阻抗 -> 有限增益
-* ============================================================
 .model NMOS_GEN NMOS (LEVEL=1 VTO=0.7  KP=120u GAMMA=0.4 LAMBDA=0.05 PHI=0.7)
 .model PMOS_GEN PMOS (LEVEL=1 VTO=-0.7 KP=40u  GAMMA=0.5 LAMBDA=0.07 PHI=0.7)
-
-* ============================================================
-*  收斂輔助: 初始工作點猜值
-* ============================================================
 .nodeset v(out)=1.65 v(d2)=2.0 v(d1)=2.2 v(ntail)=0.6 v(nbias)=0.95 v(inp)=1.65
-
-* ============================================================
-*  分析與量測 (control 區塊: 先求工作點再做 AC, 收斂最穩)
-*  注意: 本 ngspice build 的 vp() 預設為弧度, 需 set units=degrees
-* ============================================================
 .control
   set units=degrees
   op
   ac dec 10 1 10G
-
-  meas ac gain   max  vdb(out)                          ; 最大(直流)增益 dB
-  meas ac ugf    when vdb(out)=0 cross=1                ; 單位增益頻率
-  meas ac ph_ugf find vp(out) when vdb(out)=0 cross=1   ; UGF 處相位 (deg)
-  let pm = 180 + ph_ugf                                 ; 相位裕度
-
-  * 印出結果供 Python 解析 (每項一行 name = value)
+  meas ac gain   max  vdb(out)
+  meas ac ugf    when vdb(out)=0 cross=1
+  meas ac ph_ugf find vp(out) when vdb(out)=0 cross=1
+  let pm = 180 + ph_ugf
   print gain
   print ugf
   print pm
-
-  * (選用) 匯出 AC 掃頻資料供畫波德圖, 由 Python 決定是否啟用
   {DUMP}
 .endc
-
 .end

@@ -31,32 +31,27 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # 一階解析: 面積 (ΣW·L) 與 功耗
 # ----------------------------------------------------------------------
 def area_um2(circuit, p):
+    # 實體化版 (有 W_x/L_x): 真實矽面積 Σ W·L (µm²)
+    wl = sum(p[k] * p["L_" + k[2:]] for k in p if k.startswith("W_") and "L_" + k[2:] in p)
+    if wl:
+        return wl * 1e12
+    # 舊參數電路回退
     if circuit.startswith("opa"):
-        L = 0.5 if "sky130" in circuit else 1.0
-        fixed = (30 + 30 + 50 + 100 + 10) * 1e-6        # 固定管寬總和
-        return (2 * p["w_diff"] + p["w_stage2"] + fixed) * 1e6 * L
+        return (2 * p.get("w_diff", 0) + p.get("w_stage2", 0) + 220e-6) * 1e6 * 0.7
     if circuit.startswith("ringosc"):
-        return 5 * (p["w_p"] + p["w_n"]) * 1e6 * 0.5
-    if circuit.startswith("bandgap"):
-        return p["n_bjt"] * 3.4 * 3.4 + p["r_trim"] * 1e-3   # BJT 面積 + 電阻面積近似
-    return 0.0
+        return 5 * (p.get("w_p", 0) + p.get("w_n", 0)) * 1e6 * 0.5
+    return p.get("n_bjt", 1) * 11.6 + p.get("r_trim", 0) * 1e-3
 
 
 def power_uw(circuit, p, m):
-    if circuit.startswith("opa"):
-        Vdd = 1.8 if "sky130" in circuit else 3.3
-        Ibias = max((Vdd - 0.9) / p["r_bias"], 1e-12)
-        Itot = Ibias * 16.0                              # 鏡像比總和近似 (尾5+二級10+其他)
-        return Vdd * Itot * 1e6
-    if circuit.startswith("ringosc"):
-        Vdd = 1.8
-        Cl = 5e-15 if "sky130" in circuit else 20e-15
-        f = m.get("freq") or 0.0
-        return 5 * Cl * Vdd * Vdd * f * 1e6              # 動態功耗 P=N·C·V²·f
-    if circuit.startswith("bandgap"):
-        I = 3 * 0.0259 * math.log(max(p["n_bjt"], 1.1)) / p["r_trim"]
-        return 3.3 * I * 1e6
-    return 0.0
+    # 舊版有電源電流相關參數 -> 物理式; 實體化版 -> ΣW 代理 (∝ 電流容量)
+    if "r_bias" in p:
+        return 3.3 * max((3.3 - 0.9) / p["r_bias"], 1e-12) * 16 * 1e6
+    if "r_trim" in p and not any(k.startswith("W_") for k in p):
+        return 3.3 * 3 * 0.0259 * math.log(max(p["n_bjt"], 1.1)) / p["r_trim"] * 1e6
+    if "w_p" in p:
+        return 5 * 5e-15 * 1.8 * 1.8 * (m.get("freq") or 0) * 1e6
+    return sum(v for k, v in p.items() if k.startswith("W_")) * 1e6   # ΣW (µm) 代理
 
 
 # ----------------------------------------------------------------------
@@ -71,13 +66,36 @@ def pareto_packages(circuit, target=None, pop=120000, seed=0):
         target = c["target_default"]
     tgt = target * c.get("target_scale", 1.0)
 
-    sur = dl.Surrogate(circuit)
     lo = np.array([c["ranges"][k][0] for k in keys])
     hi = np.array([c["ranges"][k][1] for k in keys])
     rng = np.random.RandomState(seed)
+
+    # 有效替代模型 (參數維度相符) -> 百萬級預測; 否則 (實體化新電路) -> 多線程 ngspice
+    sur = None
+    pth = os.path.join(BASE_DIR, "data", f"surrogate_{circuit}.pth")
+    if os.path.exists(pth):
+        try:
+            s = dl.Surrogate(circuit)
+            if len(s.features) == len(keys):
+                sur = s
+        except Exception:
+            sur = None
+    if sur is None:
+        pop = min(pop, 600)                              # ngspice 路徑: 限制候選數
     X = lo + rng.random((pop, len(keys))) * (hi - lo)
-    pred = sur.predict(X)
-    col = {t: pred[:, j] for j, t in enumerate(sur.targets)}
+    if sur is not None:
+        pred = sur.predict(X)
+        col = {t: pred[:, j] for j, t in enumerate(sur.targets)}
+    else:
+        import uuid
+        from concurrent.futures import ThreadPoolExecutor
+        def _ev(row):
+            return eda.run_isolated(circuit, {k: float(row[i]) for i, k in enumerate(keys)},
+                                    uuid.uuid4().hex[:8])
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            recs = list(ex.map(_ev, X))
+        col = {t: np.array([(r.get(t) if r.get("ok") and r.get(t) is not None else np.nan)
+                            for r in recs]) for t in ("gain", "pm", "ugf", "tc", "vref", "freq")}
 
     # 可行解遮罩 (滿足規格)
     if c["objective"] == "target":
@@ -93,7 +111,8 @@ def pareto_packages(circuit, target=None, pop=120000, seed=0):
 
     # DNN 候選的功耗/面積
     params_list = [{k: float(X[i, j]) for j, k in enumerate(keys)} for i in idx]
-    mets_list = [{t: float(col[t][i]) for t in sur.targets} for i in idx]
+    _mt = list(sur.targets) if sur is not None else list(col.keys())
+    mets_list = [{t: float(col[t][i]) for t in _mt} for i in idx]
     area = np.array([area_um2(circuit, p) for p in params_list])
     powr = np.array([power_uw(circuit, params_list[k], mets_list[k]) for k in range(len(idx))])
 
