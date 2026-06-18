@@ -15,6 +15,7 @@ wave_*.txt
 sweep_*.sp
 ac_sweep.txt
 samples.csv
+cf_tunnel.log
 
 # Python
 __pycache__/
