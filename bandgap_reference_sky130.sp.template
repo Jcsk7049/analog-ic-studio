@@ -1,0 +1,52 @@
+* ============================================================
+*  Bandgap Reference — sky130 真實 PDK 版
+*  BJT 採用「自 sky130 pnp_05v5 PDK 模型卡萃取的真實 Gummel-Poon 參數」
+*  (is/bf/vaf/eg/xti/溫度係數 = 決定溫漂準確度的關鍵, 取自 sky130)
+*  電流鏡用 3.3V 理想化 PMOS 以確保溫度掃描收斂 (帶隙準確度由 BJT 主導)
+*
+*  可調參數:
+*    {R_trim}  -> PTAT 電流電阻 R1 (ohm)
+*    {N_bjt}   -> Q2 BJT 面積比 (並聯數)
+*  量測輸出: vref(常溫 27C, V) / tc(溫漂, ppm/°C)
+* ============================================================
+.title Bandgap Reference (sky130 PNP)
+
+Vdd vdd 0 3.3
+
+MP1 n1   g vdd vdd PMOS_BG W=50u L=2u
+MP2 n2   g vdd vdd PMOS_BG W=50u L=2u
+MP3 vref g vdd vdd PMOS_BG W=50u L=2u
+
+* 理想運放: 強制 V(n1)=V(n2), 輸出驅動鏡像閘極
+Bop g 0 V = 1.65 - 1e5*(V(n1)-V(n2))
+
+Q1 0 0 n1 PNP_SKY130 1
+R1 n2 e2 {R_trim}
+Q2 0 0 e2 PNP_SKY130 {N_bjt}
+R3 vref e3 75k
+Q3 0 0 e3 PNP_SKY130 1
+
+.model PMOS_BG PMOS (LEVEL=1 VTO=-0.7 KP=40u LAMBDA=0.02 PHI=0.7)
+* --- 真實 sky130 pnp_05v5 標稱參數 (自 PDK model card 萃取, 去除 MC 變異項) ---
+.model PNP_SKY130 pnp (level=1 tref=30 is=7.119e-18 bf=16.603 nf=1.0 vaf=111.6
++ ikf=0.00038589 ise=1.031e-15 ne=1.64 br=0.2675 var=4.3 ikr=0.0043 nkf=0.426
++ isc=1.9855e-15 nc=1.0 rb=73.32 re=5.3848 rc=100.0 rbm=25.19 irb=0.0002
++ eg=1.125 xtb=1.692 xti=5.0)
+
+.nodeset v(n1)=0.7 v(n2)=0.7 v(g)=1.6 v(vref)=1.25
+
+.dc temp -40 125 1
+
+.control
+  dc temp -40 125 1
+  meas dc vref_max max v(vref)
+  meas dc vref_min min v(vref)
+  meas dc vref find v(vref) at=27
+  let tc = (vref_max - vref_min) / (vref * 165) * 1e6
+
+  print vref
+  print tc
+
+  {DUMP}
+.endc
+.end

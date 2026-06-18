@@ -1,0 +1,40 @@
+* ============================================================
+*  5-Stage Ring Oscillator — SkyWater sky130 真實 PDK 版 (1.8V)
+*  反相器 MOS = sky130_fd_pr__nfet_01v8 / pfet_01v8 (BSIM4)
+*
+*  可調參數 (W 單位=微米, 因 .option scale=1u):
+*    {W_p}  -> 反相器 PMOS 寬度
+*    {W_n}  -> 反相器 NMOS 寬度
+*  量測輸出: freq(振盪頻率, Hz)
+* ============================================================
+.title 5-Stage Ring Oscillator (sky130)
+
+.option scale=1u
+.lib "pdk/sky130_minimal.lib.spice" tt
+
+Vdd vdd 0 1.8
+
+.subckt inv in out vdd vss
+XMP out in vdd vdd sky130_fd_pr__pfet_01v8 L=0.15 W={W_p}
+XMN out in vss vss sky130_fd_pr__nfet_01v8 L=0.15 W={W_n}
+Cl out 0 5f
+.ends
+
+X1 n1 n2 vdd 0 inv
+X2 n2 n3 vdd 0 inv
+X3 n3 n4 vdd 0 inv
+X4 n4 n5 vdd 0 inv
+X5 n5 n1 vdd 0 inv
+
+.ic v(n1)=0
+
+.control
+  tran 2p 30n uic
+  meas tran t1 when v(n1)=0.9 td=12n rise=1
+  meas tran t2 when v(n1)=0.9 td=12n rise=6
+  let freq = 5 / (t2 - t1)
+  print freq
+
+  {DUMP}
+.endc
+.end

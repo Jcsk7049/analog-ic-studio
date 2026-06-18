@@ -1,0 +1,63 @@
+* ============================================================
+*  Current-Starved 3-Stage Ring VCO  (SkyWater sky130, 1.8V)
+*  反向工程自真實原理圖:
+*    - 控制偏置區: M7 (Vctrl V->I) / N34 (diode) / M11,M12 (PMOS 鏡像) -> Vbn
+*    - 核心振盪區: 3 級反相器 (PMOS M0/M2/M4 上, NMOS M1/M3/M5 下)
+*    - 底部電流控制管: M28/M27/M32 (NMOS 飢餓尾電流, gate=Vbn)
+*  Vctrl 上升 -> 偏置電流上升 -> 各級延遲縮短 -> 振盪頻率上升
+*
+*  模型: NMOS = sky130_fd_pr__nfet_01v8 ; PMOS = sky130_fd_pr__pfet_01v8_hvt
+*  可調引數: {Vctrl_val}  (控制電壓, 0.2 ~ 1.8 V)
+*  量測輸出: clk_freq (Vout 振盪頻率, Hz)
+*
+*  注意: 第一行必須是標題/註解, .option scale 不可置於第一行 (會被當標題)
+* ============================================================
+.option scale=1u
+.lib "pdk/sky130_minimal.lib.spice" tt
+
+Vdd   vdd 0 1.8
+Vctrl ctrl 0 {Vctrl_val}
+
+* ---------- 控制偏置區: Vctrl -> Vbn (nbn) ----------
+XM7  pbias ctrl  0   0   sky130_fd_pr__nfet_01v8      L=0.5 W=1   ; V->I (Vctrl 控制電流)
+XM11 pbias pbias vdd vdd sky130_fd_pr__pfet_01v8_hvt  L=0.5 W=2   ; 二極體 PMOS
+XM12 nbn   pbias vdd vdd sky130_fd_pr__pfet_01v8_hvt  L=0.5 W=2   ; PMOS 鏡像
+XN34 nbn   nbn   0   0   sky130_fd_pr__nfet_01v8      L=0.5 W=2   ; 二極體 NMOS -> Vbn
+
+* ---------- 核心: 3 級電流飢餓反相器環 (PMOS 上拉直接接 vdd) ----------
+* 第 1 級 (M0 上 / M1 下 / M28 尾)
+XM0  o1   Vout vdd vdd  sky130_fd_pr__pfet_01v8_hvt  L=0.15 W=2
+XM1  o1   Vout s1  0    sky130_fd_pr__nfet_01v8      L=0.15 W=1
+XM28 s1   nbn  0   0    sky130_fd_pr__nfet_01v8      L=0.5  W=2
+* 第 2 級 (M2 / M3 / M27)
+XM2  o2   o1   vdd vdd  sky130_fd_pr__pfet_01v8_hvt  L=0.15 W=2
+XM3  o2   o1   s2  0    sky130_fd_pr__nfet_01v8      L=0.15 W=1
+XM27 s2   nbn  0   0    sky130_fd_pr__nfet_01v8      L=0.5  W=2
+* 第 3 級 (M4 / M5 / M32) -> 輸出 Vout
+XM4  Vout o2   vdd vdd  sky130_fd_pr__pfet_01v8_hvt  L=0.15 W=2
+XM5  Vout o2   s3  0    sky130_fd_pr__nfet_01v8      L=0.15 W=1
+XM32 s3   nbn  0   0    sky130_fd_pr__nfet_01v8      L=0.5  W=2
+
+* 各級負載電容 (決定延遲/頻率)
+Cl1 o1   0 0.3f
+Cl2 o2   0 0.3f
+Cl3 Vout 0 0.3f
+
+.ic v(o1)=0 v(o2)=1.8 v(Vout)=0    ; 初始不平衡以啟振
+
+* ============================================================
+*  瞬態分析與頻率量測
+* ============================================================
+.tran 0.01n 40n
+
+.control
+  tran 0.01n 40n uic
+  meas tran t1 when v(Vout)=0.9 td=12n rise=1
+  meas tran t2 when v(Vout)=0.9 td=12n rise=4
+  let clk_freq = 3 / (t2 - t1)          ; 3 個週期平均
+  let freq = clk_freq
+  print freq
+
+  {DUMP}
+.endc
+.end

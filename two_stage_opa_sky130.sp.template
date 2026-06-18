@@ -1,0 +1,66 @@
+* ============================================================
+*  Two-Stage CMOS OPA — SkyWater sky130 真實 PDK 版 (1.8V)
+*  元件: sky130_fd_pr__nfet_01v8 / pfet_01v8 (BSIM4, tt corner)
+*
+*  可調參數 (由 eda_control 填入, W 單位=微米 因 .option scale=1u):
+*    {W_diff}    -> 差動對 M1/M2 寬度 (um)
+*    {W_stage2}  -> 第二級 M6 寬度    (um)
+*    {R_bias}    -> 偏壓電阻          (ohm)
+*  量測輸出: gain(dB) / ugf(Hz) / pm(deg)
+* ============================================================
+.title Two-Stage CMOS OPA (sky130)
+
+.option scale=1u                 ; 之後 W/L 數值皆以微米計
+.lib "pdk/sky130_minimal.lib.spice" tt
+
+.param VDD_V = 1.8
+.param VCM_V = 0.9               ; 1.8V 製程, 共模取中點
+
+Vdd  vdd  0   DC {VDD_V}
+Vss  vss  0   DC 0
+
+* --- 開迴路 AC 量測台 (大電阻 DC 回授, AC 斷開) ---
+Vsig inn  0   DC {VCM_V} AC 1
+Rfb  out  inp 1G
+CF   inp  0   1
+
+* --- 第一級: NMOS 差動對 + PMOS 電流鏡負載 ---
+XM1  d1   inp  ntail vss  sky130_fd_pr__nfet_01v8  L=0.5 W={W_diff}
+XM2  d2   inn  ntail vss  sky130_fd_pr__nfet_01v8  L=0.5 W={W_diff}
+XM3  d1   d1   vdd   vdd  sky130_fd_pr__pfet_01v8  L=0.5 W=10
+XM4  d2   d1   vdd   vdd  sky130_fd_pr__pfet_01v8  L=0.5 W=10
+
+* --- 尾電流源 ---
+XM5  ntail nbias vss vss  sky130_fd_pr__nfet_01v8  L=0.5 W=20
+
+* --- 第二級: PMOS 共源 + NMOS 電流源負載 ---
+XM6  out  d2    vdd  vdd  sky130_fd_pr__pfet_01v8  L=0.5 W={W_stage2}
+XM7  out  nbias vss  vss  sky130_fd_pr__nfet_01v8  L=0.5 W=40
+
+* --- 偏壓支路 ---
+Rbias vdd  nbias  {R_bias}
+XM8   nbias nbias vss vss sky130_fd_pr__nfet_01v8  L=0.5 W=4
+
+* --- 米勒補償 + 負載 ---
+Cc   out  d2   1p
+CL   out  0    2p
+
+.nodeset v(out)=0.9 v(d2)=1.1 v(d1)=1.0 v(ntail)=0.3 v(nbias)=0.6 v(inp)=0.9
+
+.control
+  set units=degrees
+  op
+  ac dec 10 1 1G
+
+  meas ac gain   max  vdb(out)
+  meas ac ugf    when vdb(out)=0 cross=1
+  meas ac ph_ugf find vp(out) when vdb(out)=0 cross=1
+  let pm = 180 + ph_ugf
+
+  print gain
+  print ugf
+  print pm
+
+  {DUMP}
+.endc
+.end

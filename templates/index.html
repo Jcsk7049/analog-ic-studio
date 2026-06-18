@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>類比 IC 自動調參平台</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  :root{
+    --bg:#F5F5F7; --white:#fff; --text:#1D1D1F; --text2:#6E6E73;
+    --blue:#0071e3; --blue-d:#0058b8; --line:rgba(0,0,0,.08);
+    --teal:#30b0c7; --purple:#5e5ce6; --orange:#ff9f0a; --green:#34c759; --red:#ff3b30;
+    --ease:cubic-bezier(0.4,0,0.6,1); --dur:.32s;
+    --radius:20px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Microsoft JhengHei",Arial,sans-serif;
+    font-size:17px;line-height:1.47;-webkit-font-smoothing:antialiased;
+  }
+  .nav{position:sticky;top:0;z-index:200;height:52px;display:flex;align-items:center;
+       background:rgba(245,245,247,.82);backdrop-filter:saturate(180%) blur(20px);
+       -webkit-backdrop-filter:saturate(180%) blur(20px);border-bottom:1px solid var(--line);}
+  .nav .wrap{max-width:1080px;margin:0 auto;padding:0 22px;width:100%;display:flex;align-items:center;gap:10px;}
+  .nav .dot{width:9px;height:9px;border-radius:50%;background:var(--blue);}
+  .nav b{font-size:15px;font-weight:600;letter-spacing:.01em;}
+  .nav .muted{color:var(--text2);font-size:13px;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px;}
+
+  .hero{text-align:center;padding:64px 22px 30px;}
+  .hero h1{font-size:clamp(2.1rem,5.2vw,3.4rem);font-weight:600;line-height:1.08;letter-spacing:-.015em;}
+  .hero p{font-size:clamp(1.1rem,2vw,1.4rem);font-weight:600;color:var(--text2);margin-top:12px;}
+
+  /* Segmented control (拓撲) */
+  .seg{position:relative;display:flex;background:#e8e8ed;border-radius:14px;padding:4px;
+       max-width:680px;margin:30px auto 0;}
+  .seg .pill{position:absolute;top:4px;bottom:4px;border-radius:11px;background:var(--white);
+       box-shadow:0 1px 4px rgba(0,0,0,.12);transition:transform var(--dur) var(--ease),width var(--dur) var(--ease);}
+  .seg button{flex:1;position:relative;z-index:2;background:none;border:none;cursor:pointer;
+       font-size:15px;font-weight:600;color:var(--text2);padding:11px 8px;border-radius:11px;
+       transition:color var(--dur) var(--ease);font-family:inherit;white-space:nowrap;}
+  .seg button.on{color:var(--text);}
+
+  /* 快速 / sky130 精準 切換 */
+  .modelrow{display:flex;flex-direction:column;align-items:center;gap:8px;margin:14px auto 0;}
+  .mtog{position:relative;display:inline-flex;background:#e8e8ed;border-radius:11px;padding:3px;}
+  .mtog .mpill{position:absolute;top:3px;bottom:3px;border-radius:9px;
+       background:linear-gradient(180deg,#fff,#f4f4f6);box-shadow:0 1px 3px rgba(0,0,0,.14);
+       transition:transform var(--dur) var(--ease),width var(--dur) var(--ease);}
+  .mtog button{position:relative;z-index:2;background:none;border:none;cursor:pointer;
+       font-size:13px;font-weight:600;color:var(--text2);padding:7px 18px;border-radius:9px;
+       transition:color var(--dur) var(--ease);font-family:inherit;white-space:nowrap;}
+  .mtog button.on{color:var(--blue);}
+  .mnote{font-size:12px;color:var(--text2);}
+
+  .card{background:var(--white);border:1px solid var(--line);border-radius:var(--radius);
+        padding:24px;box-shadow:0 1px 2px rgba(0,0,0,.04);}
+  .ctrl{max-width:680px;margin:22px auto 0;display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;justify-content:center;}
+  .field{flex:1;min-width:220px;}
+  label{display:block;font-size:13px;color:var(--text2);margin-bottom:8px;font-weight:600;}
+  .inrow{display:flex;align-items:center;background:#f0f0f3;border-radius:12px;padding:0 16px;
+         border:1px solid transparent;transition:border var(--dur) var(--ease);}
+  .inrow:focus-within{border-color:var(--blue);background:var(--white);}
+  .inrow input{flex:1;background:none;border:none;outline:none;font-size:22px;font-weight:600;
+        color:var(--text);padding:13px 0;font-family:inherit;width:100%;}
+  .inrow .unit{color:var(--text2);font-weight:600;font-size:16px;}
+  .auto-chip{background:#eef6ff;color:var(--blue);border-radius:12px;padding:13px 18px;
+        font-weight:600;font-size:16px;border:1px solid #d6e8ff;}
+  .btn{background:var(--blue);color:#fff;border:none;border-radius:980px;padding:13px 30px;
+       font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;
+       transition:background var(--dur) var(--ease),transform .15s var(--ease);white-space:nowrap;}
+  .btn:hover{background:var(--blue-d);} .btn:active{transform:scale(.97);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .hint{text-align:center;color:var(--text2);font-size:13px;margin-top:14px;}
+
+  .results{margin-top:40px;}
+  .banner{border-radius:16px;padding:15px 20px;font-size:15px;margin-bottom:22px;font-weight:500;}
+  .banner.ok{background:#e7f9ee;color:#11823b;border:1px solid #b6ecc8;}
+  .banner.warn{background:#fff5e5;color:#9a6300;border:1px solid #ffe0a8;}
+
+  .grid{display:grid;gap:18px;}
+  .metrics{grid-template-columns:repeat(4,1fr);}
+  @media(max-width:760px){.metrics{grid-template-columns:repeat(2,1fr);}}
+  .metric .k{font-size:13px;color:var(--text2);font-weight:600;}
+  .metric .v{font-size:30px;font-weight:600;margin-top:8px;letter-spacing:-.02em;}
+  .v.blue{color:var(--blue);} .v.teal{color:var(--teal);} .v.purple{color:var(--purple);}
+  .v.orange{color:var(--orange);} .v.green{color:var(--green);} .v.red{color:var(--red);}
+
+  .two{display:grid;grid-template-columns:1.05fr 1fr;gap:18px;margin-top:18px;}
+  @media(max-width:880px){.two{grid-template-columns:1fr;}}
+  .sect{font-size:15px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th,td{padding:9px 8px;text-align:right;border-bottom:1px solid var(--line);}
+  th:first-child,td:first-child{text-align:left;}
+  th{color:var(--text2);font-weight:600;font-size:12px;}
+  .kc td b{font-size:15px;} .kc .copy{cursor:pointer;color:var(--blue);font-size:12px;margin-left:8px;font-weight:600;}
+  .infl{margin-bottom:16px;}
+  .infl .top{display:flex;justify-content:space-between;font-size:14px;margin-bottom:6px;font-weight:600;}
+  .specrow{display:grid;grid-template-columns:96px 1fr 44px;gap:8px;align-items:center;margin:5px 0;font-size:12px;}
+  .speclbl{color:var(--text2);}
+  .bar{height:10px;border-radius:6px;background:#ececed;overflow:hidden;}
+  .bar>span{display:block;height:100%;border-radius:6px;width:0;transition:width .7s var(--ease);}
+  .bar>span.s0{background:linear-gradient(90deg,var(--blue),var(--teal));}
+  .bar>span.s1{background:linear-gradient(90deg,var(--purple),#9f8cff);}
+  .infl .pct{font-weight:600;text-align:right;}
+  .chart img{width:100%;border-radius:14px;display:block;}
+  .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  @media(max-width:760px){.pgrid{grid-template-columns:1fr;}}
+  .pcard{background:var(--white);border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;
+         cursor:pointer;transition:border var(--dur) var(--ease),transform .15s var(--ease),box-shadow var(--dur) var(--ease);}
+  .pcard:hover{transform:translateY(-2px);box-shadow:0 6px 18px rgba(0,0,0,.08);}
+  .pcard.on{border-color:var(--blue);box-shadow:0 4px 16px rgba(0,113,227,.18);}
+  .pcard .ph{font-weight:600;font-size:14px;margin-bottom:2px;}
+  .pcard .pen{font-size:11px;color:var(--text2);margin-bottom:10px;}
+  .pcard .pm{font-size:12px;color:var(--text2);display:flex;justify-content:space-between;margin:3px 0;}
+  .pcard .pm b{color:var(--text);font-weight:600;}
+  .pcard .ptag{display:inline-block;font-size:11px;font-weight:700;color:var(--blue);border:1px solid var(--blue);
+        border-radius:8px;padding:1px 7px;margin-bottom:8px;}
+  .actions{margin-top:16px;display:flex;gap:12px;flex-wrap:wrap;}
+  .btn-ghost{background:transparent;color:var(--blue);border:1px solid var(--blue);border-radius:980px;
+       padding:9px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;
+       transition:all var(--dur) var(--ease);}
+  .btn-ghost:hover{background:var(--blue);color:#fff;}
+  .sel{background:#f0f0f3;border:1px solid var(--line);border-radius:10px;padding:9px 12px;
+       font-size:14px;font-family:inherit;color:var(--text);outline:none;cursor:pointer;}
+  .sel:focus{border-color:var(--blue);}
+  .three-line{border-collapse:collapse;width:100%;font-size:14px;}
+  .three-line th,.three-line td{padding:8px 14px;text-align:left;}
+  .three-line td:not(:first-child),.three-line th:not(:first-child){text-align:right;}
+  .three-line thead th{border-top:2.5px solid var(--text);border-bottom:1.2px solid var(--text);font-weight:600;}
+  .three-line tbody tr:last-child td{border-bottom:2.5px solid var(--text);}
+  .texarea{width:100%;height:240px;font-family:"SF Mono",Consolas,monospace;font-size:12px;
+       background:#f0f0f3;border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text);resize:vertical;}
+  .spinner{width:17px;height:17px;border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;
+       border-radius:50%;display:inline-block;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  [data-a]{opacity:0;transform:translateY(20px);
+       transition:opacity var(--dur) .05s var(--ease),transform var(--dur) .05s var(--ease);}
+  [data-a].in{opacity:1;transform:none;}
+  .hidden{display:none!important;}
+  .foot{text-align:center;color:var(--text2);font-size:12px;padding:40px 0 24px;}
+</style>
+</head>
+<body>
+<nav class="nav"><div class="wrap"><span class="dot"></span><b>Analog IC Studio</b>
+  <span class="muted">· 自動調參平台</span></div></nav>
+
+<div class="hero">
+  <h1 data-a>類比 IC 自動調參平台</h1>
+  <p data-a>選擇電路拓撲，輸入規格目標，Agent 自動回推元件參數。</p>
+
+  <div class="seg" id="seg" data-a>
+    <span class="pill" id="segPill"></span>
+    <!-- 拓撲鈕由 JS 動態生成 -->
+  </div>
+
+  <div class="modelrow" data-a>
+    <div class="mtog" id="mtog">
+      <span class="mpill" id="mPill"></span>
+      <button data-m="fast" class="on" onclick="selectModel('fast')">快速模型</button>
+      <button data-m="sky130" onclick="selectModel('sky130')">sky130 精準</button>
+    </div>
+    <span class="mnote" id="mNote"></span>
+  </div>
+
+  <div class="ctrl" data-a>
+    <div class="field">
+      <label id="tgtLabel">目標增益 (dB)</label>
+      <div class="inrow" id="tgtRow">
+        <input type="number" id="target" value="60" step="0.5">
+        <span class="unit" id="tgtUnit">dB</span>
+      </div>
+      <div class="auto-chip hidden" id="autoChip">自動最小化 TC → 0 ppm/°C</div>
+    </div>
+    <button class="btn" id="runBtn" onclick="run()">開始優化</button>
+  </div>
+  <div class="hint" id="hint"></div>
+</div>
+
+<div class="wrap results hidden" id="results">
+  <div class="banner" id="banner" data-a></div>
+
+  <div class="card" data-a>
+    <div class="sect">最終量測結果</div>
+    <div class="grid metrics" id="metrics"></div>
+  </div>
+
+  <div class="card" data-a>
+    <div class="sect">AI 推薦設計套餐（帕雷托最優）</div>
+    <button class="btn-ghost" id="paretoBtn" onclick="runPareto()">生成 AI 推薦設計套餐（帕雷托最優）</button>
+    <span class="mnote" style="margin-left:12px;">在滿足規格的可行解中，找出效能 / 穩定 / 低功耗三組帕雷托最優設計</span>
+    <div id="paretoBox" class="hidden" style="margin-top:16px;">
+      <div id="paretoCards" class="pgrid"></div>
+      <div class="mnote" style="margin-top:10px;">點選套餐卡片 → 下方「貼回 KiCad 的參數」與「各參數影響度」同步切換</div>
+    </div>
+  </div>
+
+  <div class="two">
+    <div class="card kc" data-a>
+      <div class="sect">貼回 KiCad 的參數</div>
+      <table><thead><tr><th>元件</th><th>角色</th><th>數值</th></tr></thead>
+        <tbody id="kicadBody"></tbody></table>
+      <div class="actions">
+        <button class="btn-ghost" onclick="copyAll()">複製全部</button>
+        <button class="btn-ghost" id="dlBtn">下載最佳化網表</button>
+      </div>
+    </div>
+    <div class="card" data-a>
+      <div class="sect">各參數影響度</div>
+      <div id="inflBox"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;" data-a>
+    <div class="sect">IEEE 標準規格表（Performance Summary）</div>
+    <button class="btn-ghost" id="specBtn" onclick="buildSpecTable()">導出論文格式規格表 + LaTeX</button>
+    <div id="specBox" class="hidden" style="margin-top:16px;">
+      <div class="twocol">
+        <div>
+          <table class="three-line" id="specTable"></table>
+        </div>
+        <div>
+          <div class="mnote" style="margin-bottom:6px;">LaTeX（booktabs 三線表）</div>
+          <textarea id="specTex" class="texarea" readonly></textarea>
+          <button class="btn-ghost" style="margin-top:8px;" onclick="cp(document.getElementById('specTex').value);alert('已複製 LaTeX 代碼')">複製 LaTeX 代碼</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card chart" style="margin-top:18px;" data-a>
+    <div class="sect" id="chartTitle">圖表</div>
+    <img id="chartImg" alt="chart">
+  </div>
+
+  <div class="card" style="margin-top:18px;" data-a>
+    <div class="sect">收斂過程</div>
+    <div style="overflow-x:auto;"><table><thead id="stepsHead"></thead><tbody id="stepsBody"></tbody></table></div>
+  </div>
+
+  <div class="card" style="margin-top:18px;" data-a id="sweepCard">
+    <div class="sect">3D 論文特性曲面（2D Parametric Sweep · 20×20=400 點）</div>
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+      <div><label>X 參數</label><select id="sweepX" class="sel"></select></div>
+      <div><label>Y 參數</label><select id="sweepY" class="sel"></select></div>
+      <button class="btn-ghost" id="sweepBtn" onclick="runSweep2d()">生成 3D 響應曲面（多線程）</button>
+      <span class="mnote" id="sweepNote"></span>
+    </div>
+    <div id="surfacePlot" style="width:100%;height:460px;margin-top:14px;"></div>
+  </div>
+
+  <div class="card" style="margin-top:18px;" data-a id="pvtCard">
+    <div class="sect">PVT 全環境驗證（Process × Voltage × Temperature · 27 組）</div>
+    <button class="btn-ghost" id="pvtBtn" onclick="runPvt()">執行 PVT 27 組掃描（tt/ff/ss × ±10%V × −40/25/125°C）</button>
+    <span class="mnote" id="pvtNote"></span>
+    <div id="pvtBox" class="hidden" style="margin-top:14px;">
+      <div class="grid metrics" id="pvtMetrics" style="margin-bottom:14px;"></div>
+      <img id="pvtImg" style="width:100%;border-radius:14px;border:1px solid var(--line);">
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;" data-a>
+    <div class="sect">製程 Corner 變異與蒙地卡羅良率分析</div>
+    <button class="btn-ghost" id="yieldBtn" onclick="runYield()">執行良率評估（±10% 高斯 × 50 次）</button>
+    <button class="btn-ghost" id="yieldDnnBtn" onclick="runYieldDNN()" style="margin-left:8px;">AI 萬點高速預測（深度學習 × 10000）</button>
+    <span class="mnote" id="yieldMethod" style="margin-left:12px;"></span>
+    <div id="yieldBox" class="hidden" style="margin-top:18px;">
+      <div class="grid metrics" id="yieldMetrics"></div>
+      <div class="two" style="margin-top:16px;">
+        <div><img id="histImg" style="width:100%;border-radius:14px;border:1px solid var(--line);"></div>
+        <div>
+          <div class="mnote" style="margin-bottom:8px;">三製程角落（TT 標稱 / FF 偏快 / SS 偏慢）</div>
+          <table><thead><tr><th>Corner</th><th id="cornerMetricHdr">規格</th><th>PM/Vref</th></tr></thead>
+            <tbody id="cornerBody"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="foot">Ngspice + Python 閉環優化 · 三拓譜 × 快速 / sky130 精準對照</div>
+
+<script>
+const CIRCUITS = {{ circuits_json | safe }};
+let family='opa', model='fast', circuit='opa', lastData=null;
+const cache={};   // 每電路快取上次結果 {result, yield}, 切換可還原
+
+// ---- 拓撲 (family) + 快速/精準 (model) ----
+function familyList(){const o=[],s={};for(const k in CIRCUITS){const f=CIRCUITS[k].family;if(!s[f]){s[f]=1;o.push(f);}}return o;}
+function familyLabel(f){for(const k in CIRCUITS)if(CIRCUITS[k].family===f&&CIRCUITS[k].model==='fast')return CIRCUITS[k].label;return f;}
+function keyFor(f,m){for(const k in CIRCUITS)if(CIRCUITS[k].family===f&&CIRCUITS[k].model===m)return k;for(const k in CIRCUITS)if(CIRCUITS[k].family===f)return k;}
+function fam(){return CIRCUITS[circuit].family;}
+
+function buildFamilies(){
+  const seg=document.getElementById('seg');
+  familyList().forEach(f=>{
+    const b=document.createElement('button');
+    b.dataset.f=f; b.textContent=familyLabel(f);
+    b.onclick=()=>selectFamily(f);
+    seg.appendChild(b);
+  });
+}
+function placePill(){
+  const fb=document.querySelector(`#seg button[data-f="${family}"]`);
+  if(fb){const p=document.getElementById('segPill');p.style.width=fb.offsetWidth+'px';p.style.transform=`translateX(${fb.offsetLeft-4}px)`;}
+  const mb=document.querySelector(`#mtog button[data-m="${model}"]`);
+  if(mb){const mp=document.getElementById('mPill');mp.style.width=mb.offsetWidth+'px';mp.style.transform=`translateX(${mb.offsetLeft-3}px)`;}
+}
+function selectFamily(f){family=f;apply();}
+function selectModel(m){model=m;apply();}
+function apply(){
+  circuit=keyFor(family,model);
+  document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on',b.dataset.f===family));
+  document.querySelectorAll('#mtog button').forEach(b=>b.classList.toggle('on',b.dataset.m===model));
+  placePill();
+  const meta=CIRCUITS[circuit];
+  document.getElementById('tgtLabel').textContent=meta.target_label;
+  const isMin=meta.objective==='minimize';
+  document.getElementById('tgtRow').classList.toggle('hidden',isMin);
+  document.getElementById('autoChip').classList.toggle('hidden',!isMin);
+  if(!isMin){document.getElementById('target').value=meta.target_default;document.getElementById('tgtUnit').textContent=meta.target_unit;}
+  const hF={opa:'約束 PM ≥ 45°，可達增益窗約 49~97 dB。',bandgap:'自動搜尋 R_trim 與 N_bjt 使溫漂最小化。',ringosc:'可達頻率約 0.3~5 GHz，自動調 W_p / W_n。'};
+  const hS={opa:'真實 sky130 BSIM4 模型，較慢（約 20 秒）但貼近實際製程。',bandgap:'BJT 用 sky130 真實萃取參數，溫漂更接近實矽。',ringosc:'真實 sky130 電流飢餓 VCO，自動調控制電壓 Vctrl（瞬態較慢）。'};
+  document.getElementById('hint').textContent=(model==='sky130'?hS:hF)[family];
+  document.getElementById('mNote').textContent=model==='sky130'
+    ? '真實 130nm PDK 模型 — 慢但準，適合驗證'
+    : '簡化模型 — 秒級收斂，適合快速探索';
+  setupSweep();
+
+  // 還原此電路上次的模擬結果 (若有)
+  const cached=cache[circuit];
+  if(cached && cached.result){
+    render(cached.result, true);            // 還原, 不捲動
+    if(cached.yieldData) renderYield(cached.yieldData);
+    if(cached.sweep) renderSurface(cached.sweep);   // 還原 3D 曲面
+    if(cached.pvt) renderPvt(cached.pvt);           // 還原 PVT 圖
+  }else{
+    document.getElementById('results').classList.add('hidden');
+  }
+}
+function setupSweep(){
+  const meta=CIRCUITS[circuit], card=document.getElementById('sweepCard');
+  if(meta.param_keys.length<2){ card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const opts=meta.param_keys.map(k=>`<option value="${k}">${meta.params[k].label}</option>`).join('');
+  const sx=document.getElementById('sweepX'), sy=document.getElementById('sweepY');
+  sx.innerHTML=opts; sy.innerHTML=opts;
+  sx.selectedIndex=0; sy.selectedIndex=1;
+  document.getElementById('sweepNote').textContent='';
+  if(window.Plotly) Plotly.purge('surfacePlot');
+  // PVT 卡: 僅 sky130 OPA / VCO 支援 (有 ff/ss 真實角落)
+  const pvtOk=(circuit==='opa_sky130'||circuit==='ringosc_sky130');
+  document.getElementById('pvtCard').classList.toggle('hidden',!pvtOk);
+  document.getElementById('pvtBox').classList.add('hidden');
+  document.getElementById('pvtNote').textContent='';
+  const pb=document.getElementById('pvtBtn'); pb.disabled=false;
+  pb.textContent='執行 PVT 27 組掃描（tt/ff/ss × ±10%V × −40/25/125°C）';
+}
+window.addEventListener('resize',placePill);
+
+// ---- run ----
+async function run(){
+  const btn=document.getElementById('runBtn');
+  const body={circuit};
+  if(CIRCUITS[circuit].objective==='target'){
+    const t=parseFloat(document.getElementById('target').value);
+    if(isNaN(t)){alert('請輸入數字');return;}
+    body.target=t;
+  }
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span>優化中…';
+  try{
+    const r=await fetch('/api/optimize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.error){alert(d.error);return;}
+    render(d);
+  }catch(e){alert('連線失敗: '+e);}
+  finally{btn.disabled=false;btn.textContent='開始優化';}
+}
+
+function digits(fmt){const m=/\.(\d)f/.exec(fmt||'');return m?+m[1]:2;}
+function fmtParam(key,siVal){const pm=lastData.params_meta[key];return (siVal*pm.scale).toFixed(digits(pm.fmt));}
+
+const SPEC_NAME={gain:'Gain',pm:'PM',tc:'TC',vref:'Vref',freq:'Freq'};
+function renderKicad(rows){
+  document.getElementById('kicadBody').innerHTML=rows.map(r=>
+    `<tr><td>${r.ref}</td><td>${r.role}</td>
+     <td><b>${r.value}</b><span class="copy" onclick="cp('${r.value}')">複製</span></td></tr>`).join('');
+}
+function renderInfluence(mi, fallbackStep){
+  const meta=CIRCUITS[circuit];
+  let html;
+  if(mi){
+    html=meta.param_keys.map(k=>{
+      const rows=mi[k].map((e,idx)=>{
+        const arrow=e.sign==='+'?'↑ 正相關':'↓ 負相關';
+        const tip=`${meta.params[k].label} 對 ${SPEC_NAME[e.spec]||e.spec}：${e.sign==='+'?'正':'負'}相關，敏感度 ${e.pct.toFixed(1)}%（${e.sign==='+'?'增大此參數使該規格上升':'增大此參數使該規格下降'}）`;
+        return `<div class="specrow" title="${tip}"><span class="speclbl">對 ${SPEC_NAME[e.spec]||e.spec} ${arrow}</span>
+          <div class="bar"><span class="s${idx}" data-w="${e.pct.toFixed(1)}"></span></div>
+          <span class="pct">${e.pct.toFixed(0)}%</span></div>`;
+      }).join('');
+      return `<div class="infl"><div class="top"><span>${meta.params[k].label}</span></div>${rows}</div>`;
+    }).join('');
+  }else if(fallbackStep){
+    html=meta.param_keys.map(k=>{
+      const i=fallbackStep.influence[k];
+      return `<div class="infl"><div class="top"><span>${meta.params[k].label}</span>
+        <span class="pct">${i.pct.toFixed(1)}% ${i.sign==='+'?'↑':'↓'}</span></div>
+        <div class="bar"><span class="s0" data-w="${i.pct.toFixed(1)}"></span></div></div>`;
+    }).join('');
+  }
+  document.getElementById('inflBox').innerHTML=html||'';
+  requestAnimationFrame(()=>document.querySelectorAll('#inflBox .bar>span').forEach(s=>s.style.width=s.dataset.w+'%'));
+}
+
+function render(d, skipScroll){
+  lastData=d;
+  cache[circuit]=cache[circuit]||{};
+  cache[circuit].result=d;
+  if(!skipScroll) cache[circuit].yieldData=null;   // 新模擬 -> 舊良率失效
+  const meta=CIRCUITS[circuit], f=d.final, m=f.metrics, F=fam();
+  const sky=meta.model==='sky130';
+  document.getElementById('results').classList.remove('hidden');
+  // 一律先收起良率區 (還原時由 apply 視快取再開啟)
+  document.getElementById('yieldBox').classList.add('hidden');
+  const yb=document.getElementById('yieldBtn'); yb.disabled=false; yb.textContent='執行良率評估（±10% 高斯 × 50 次）';
+  const yd=document.getElementById('yieldDnnBtn'); yd.disabled=false; yd.textContent='AI 萬點高速預測（深度學習 × 10000）';
+  document.getElementById('yieldMethod').textContent='';
+  document.getElementById('specBox').classList.add('hidden');   // 規格表需重新導出
+
+  // banner
+  const b=document.getElementById('banner');
+  const ok=d.status==='converged';
+  const tag=sky?'<b>[sky130 精準]</b> ':'';
+  b.className='banner '+(ok?'ok':'warn');
+  if(F==='bandgap'){
+    b.innerHTML=`${tag}已找到最佳化解，溫漂 TC = <b>${m.tc.toFixed(2)} ppm/°C</b>，Vref = <b>${m.vref.toFixed(4)} V</b>`;
+  }else if(ok){
+    b.innerHTML=`${tag}收斂成功！第 ${f.step} 步達標（誤差 ${f.err_pct.toFixed(2)}%）`;
+  }else{
+    b.innerHTML=`${tag}已達邊界/約束極限，回報最佳折衷解（誤差 ${f.err_pct.toFixed(2)}%）`;
+  }
+  if(d.method==='surrogate' && f.surrogate_r2){
+    const r2=Object.entries(f.surrogate_r2).map(([k,v])=>`${k} R²=${(+v).toFixed(3)}`).join('，');
+    b.innerHTML+=`<br><span style="font-size:13px;opacity:.85;">AI 替代模型預測引擎（PyTorch DNN）· ${r2} · 百萬級群體尋優 → ngspice 1 次校正</span>`;
+  }
+  if(d.method==='vco_hybrid' && f.kvco!=null){
+    b.innerHTML+=`<br><span style="font-size:13px;opacity:.85;">真實 sky130 VCO · Scipy 混合優化（DE 全域×3 + Nelder-Mead 局部）· 最佳 Vctrl=${f.params.vctrl.toFixed(4)} V · KVCO≈${f.kvco.toFixed(2)} GHz/V · ${f.n_eval} 次評估（Self-healing 攔截 ${f.n_heal} 個死區）</span>`;
+  }
+
+  // metric cards
+  let cards=[];
+  if(F==='opa'){
+    const pmok=m.pm>=45;
+    cards=[['目標 Gain',d.target.toFixed(2)+' dB','blue'],
+           ['實測 Gain',m.gain.toFixed(2)+' dB','orange'],
+           ['相位裕度 PM',m.pm.toFixed(1)+'°',pmok?'green':'red'],
+           ['單位增益頻率',(m.ugf/1e6).toFixed(1)+' MHz','purple']];
+  }else if(F==='bandgap'){
+    cards=[['輸出 Vref',m.vref.toFixed(4)+' V','blue'],
+           ['溫漂 TC',m.tc.toFixed(2)+' ppm/°C',Math.abs(m.tc)<20?'green':'orange'],
+           ['優化目標','最小化 TC','purple'],
+           ['迭代步數',f.step+' 步','teal']];
+  }else{
+    cards=[['目標頻率',d.target.toFixed(3)+' GHz','blue'],
+           ['實測頻率',(m.freq/1e9).toFixed(3)+' GHz','orange'],
+           ['相對誤差',f.err_pct.toFixed(2)+' %',Math.abs(f.err_pct)<1?'green':'red'],
+           ['迭代步數',f.step+' 步','teal']];
+  }
+  document.getElementById('metrics').innerHTML=cards.map(c=>
+    `<div class="metric"><div class="k">${c[0]}</div><div class="v ${c[2]}">${c[1]}</div></div>`).join('');
+
+  // kicad + 多維度影響度 (抽成函式, 套餐切換可重用)
+  renderKicad(d.kicad);
+  const steps=d.steps.filter(s=>!s.fail);
+  renderInfluence(d.multi_influence, steps[steps.length-1]);
+
+  // 帕雷托套餐區: 每次新模擬先收起
+  document.getElementById('paretoBox').classList.add('hidden');
+  const pbtn=document.getElementById('paretoBtn'); pbtn.disabled=false; pbtn.textContent='生成 AI 推薦設計套餐（帕雷托最優）';
+
+  // chart
+  const titles={opa:'開迴路波德圖（Gain / Phase）',bandgap:'輸出電壓 vs 溫度',ringosc:'時域方波震盪'};
+  document.getElementById('chartTitle').textContent=titles[F];
+  document.getElementById('chartImg').src='data:image/png;base64,'+d.chart_png;
+
+  // steps table (動態欄位)
+  const cols=['步',...meta.param_keys.map(k=>meta.params[k].label.split(' ')[0]+' ('+meta.params[k].unit+')')];
+  let metricCol = F==='opa'?'Gain(dB)':F==='bandgap'?'TC(ppm)':'Freq(GHz)';
+  cols.push(metricCol); if(meta.objective==='target')cols.push('誤差(%)');
+  document.getElementById('stepsHead').innerHTML='<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>';
+  document.getElementById('stepsBody').innerHTML=steps.map(s=>{
+    let cells=[s.step,...meta.param_keys.map(k=>fmtParam(k,s.params[k]))];
+    let pv=s.metrics; let mv = F==='opa'?pv.gain.toFixed(2):F==='bandgap'?pv.tc.toFixed(2):(pv.freq/1e9).toFixed(3);
+    cells.push(mv); if(meta.objective==='target')cells.push(s.err_pct.toFixed(2));
+    return '<tr>'+cells.map(c=>`<td>${c}</td>`).join('')+'</tr>';
+  }).join('');
+
+  selPkg=null;                                        // 新模擬 -> 清除套餐選擇
+  document.getElementById('dlBtn').onclick=doDownload;
+  reveal();
+  if(!skipScroll) document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function doDownload(){
+  const p=currentParams();
+  const q=CIRCUITS[circuit].param_keys.map(k=>`${k}=${p[k]}`).join('&');
+  window.location='/api/netlist?circuit='+circuit+'&'+q;
+}
+// ---- IEEE 三線規格表 + LaTeX ----
+function buildSpecTable(){
+  if(!lastData){alert('請先執行優化');return;}
+  const meta=CIRCUITS[circuit], F=fam(), m=lastData.final.metrics, p=currentParams();
+  const tech=meta.model==='sky130'?'SkyWater 130 nm':'Generic Level-1';
+  const supply=circuit==='opa'?'3.3':(circuit.indexOf('bandgap')>=0?'3.3':'1.8');
+  let rows=[['Technology',tech,'-'],['Supply Voltage',supply,'V']];
+  if(F==='opa'){
+    rows.push(['DC Gain',m.gain.toFixed(2),'dB']);
+    rows.push(['Phase Margin',m.pm.toFixed(1),'deg']);
+    if(m.ugf) rows.push(['Unity-Gain BW',(m.ugf/1e6).toFixed(1),'MHz']);
+  }else if(F==='bandgap'){
+    rows.push(['Reference Voltage',m.vref.toFixed(4),'V']);
+    rows.push(['Temp. Coefficient',m.tc.toFixed(2),'ppm/degC']);
+  }else{
+    rows.push(['Oscillation Freq.',(m.freq/1e9).toFixed(4),'GHz']);
+    if(lastData.final.kvco!=null) rows.push(['K_VCO',lastData.final.kvco.toFixed(3),'GHz/V']);
+    if(p.vctrl!=null) rows.push(['Control Voltage',p.vctrl.toFixed(4),'V']);
+  }
+  document.getElementById('specTable').innerHTML=
+    '<thead><tr><th>Parameter</th><th>This Work</th><th>Unit</th></tr></thead><tbody>'+
+    rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('')+'</tbody>';
+  let tex='\\begin{table}[t]\n\\centering\n\\caption{Performance Summary of the Proposed Design}\n\\label{tab:perf}\n\\begin{tabular}{lcc}\n\\toprule\nParameter & This Work & Unit \\\\\n\\midrule\n';
+  tex+=rows.map(r=>`${r[0]} & ${r[1]} & ${r[2].replace('degC','$^{\\circ}$C')} \\\\`).join('\n');
+  tex+='\n\\bottomrule\n\\end{tabular}\n\\end{table}';
+  document.getElementById('specTex').value=tex;
+  document.getElementById('specBox').classList.remove('hidden');
+}
+
+function cp(t){navigator.clipboard.writeText(t);}
+function copyAll(){
+  if(!lastData)return;const meta=CIRCUITS[circuit],p=currentParams();
+  const txt=meta.param_keys.map(k=>`${meta.params[k].label} = ${fmtParam(k,p[k])}${meta.params[k].unit}`).join('\n');
+  navigator.clipboard.writeText(txt);alert('已複製：\n'+txt);
+}
+
+// ---- 良率分析 ----
+async function _doYield(url, btnId, label){
+  if(!lastData)return;
+  const btn=document.getElementById(btnId), txt=btn.textContent;
+  btn.disabled=true; btn.innerHTML='<span class="spinner" style="border-color:rgba(0,113,227,.3);border-top-color:transparent;"></span>'+label;
+  try{
+    const body={circuit, params:lastData.final.params};
+    if(CIRCUITS[circuit].objective==='target') body.target=lastData.target;
+    const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.error){alert(d.error);return;}
+    renderYield(d);
+  }catch(e){alert('失敗: '+e);}
+  finally{btn.disabled=false; btn.textContent=txt;}
+}
+function runYield(){ _doYield('/api/yield','yieldBtn','評估中…'); }
+function runYieldDNN(){ _doYield('/api/yield_dnn','yieldDnnBtn','萬點推論中…'); }
+
+// ---- 帕雷托多套餐 ----
+let paretoPkgs=null, selPkg=null;
+function currentParams(){ return (selPkg&&selPkg.params)||lastData.final.params; }
+async function runPareto(){
+  if(!lastData)return;
+  const btn=document.getElementById('paretoBtn'), txt=btn.textContent;
+  btn.disabled=true; btn.innerHTML='<span class="spinner" style="border-color:rgba(0,113,227,.3);border-top-color:transparent;"></span>搜尋帕雷托前緣中…';
+  try{
+    const body={circuit};
+    if(CIRCUITS[circuit].objective==='target') body.target=lastData.target;
+    const r=await fetch('/api/pareto',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.error){alert(d.error);return;}
+    renderPareto(d);
+  }catch(e){alert('失敗: '+e);}
+  finally{btn.disabled=false; btn.textContent='重新生成套餐';}
+}
+function pkgRows(pk){
+  const F=fam(), m=pk.metrics;
+  if(F==='opa')return [['Gain',m.gain.toFixed(2)+' dB'],['PM',m.pm.toFixed(1)+'°'],['UGF',(m.ugf/1e6).toFixed(0)+' MHz'],['功耗',pk.power_uw.toFixed(0)+' µW'],['面積',pk.area_um2.toFixed(0)+' µm²']];
+  if(F==='bandgap')return [['TC',m.tc.toFixed(2)+' ppm/°C'],['Vref',m.vref.toFixed(3)+' V'],['功耗',pk.power_uw.toFixed(2)+' µW'],['面積',pk.area_um2.toFixed(0)+' µm²']];
+  return [['Freq',(m.freq/1e9).toFixed(3)+' GHz'],['功耗',pk.power_uw.toFixed(0)+' µW'],['面積',pk.area_um2.toFixed(1)+' µm²']];
+}
+function renderPareto(d){
+  paretoPkgs=d.packages;
+  document.getElementById('paretoBox').classList.remove('hidden');
+  document.getElementById('paretoCards').innerHTML=d.packages.map((pk,i)=>
+    `<div class="pcard" id="pcard${i}" onclick="selectPackage(${i})">
+       <span class="ptag">套餐 ${pk.id}</span>
+       <div class="ph">${pk.label_zh}</div><div class="pen">${pk.label_en}</div>
+       ${pkgRows(pk).map(x=>`<div class="pm"><span>${x[0]}</span><b>${x[1]}</b></div>`).join('')}
+     </div>`).join('');
+  selectPackage(0);
+}
+function selectPackage(i){
+  selPkg=paretoPkgs[i];
+  document.querySelectorAll('.pcard').forEach((c,j)=>c.classList.toggle('on',j===i));
+  renderKicad(selPkg.kicad);
+  renderInfluence(selPkg.multi_influence, null);
+}
+
+// ---- PVT 全環境掃描 ----
+async function runPvt(){
+  const btn=document.getElementById('pvtBtn'), txt=btn.textContent;
+  btn.disabled=true; btn.innerHTML='<span class="spinner" style="border-color:rgba(0,113,227,.3);border-top-color:transparent;"></span>27 組環境掃描中…';
+  try{
+    const body={circuit, params:(lastData?lastData.final.params:undefined)};
+    const r=await fetch('/api/pvt',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.error){alert(d.error);return;}
+    cache[circuit]=cache[circuit]||{}; cache[circuit].pvt=d;
+    renderPvt(d);
+  }catch(e){alert('失敗: '+e);}
+  finally{btn.disabled=false; btn.textContent=txt;}
+}
+function renderPvt(d){
+  document.getElementById('pvtBox').classList.remove('hidden');
+  document.getElementById('pvtNote').textContent=`${d.n_ok}/${d.total} 組有效`;
+  const rb=d.robustness||{}, u=d.metric==='freq'?'GHz':(d.metric==='gain'?'dB':'');
+  const cards=[
+    ['Mean',(rb.mean!=null?rb.mean.toFixed(3):'-')+' '+u,'blue'],
+    ['σ (Std)',(rb.std!=null?rb.std.toFixed(3):'-')+' '+u,'purple'],
+    ['範圍 Min~Max',(rb.min!=null?rb.min.toFixed(2)+'~'+rb.max.toFixed(2):'-'),'teal'],
+    ['全域變異 Spread',(rb.spread_pct!=null?rb.spread_pct.toFixed(1):'-')+' %', (rb.spread_pct<15?'green':(rb.spread_pct<30?'orange':'red'))],
+  ];
+  document.getElementById('pvtMetrics').innerHTML=cards.map(c=>
+    `<div class="metric"><div class="k">${c[0]}</div><div class="v ${c[2]}">${c[1]}</div></div>`).join('');
+  document.getElementById('pvtImg').src='data:image/png;base64,'+d.pvt_png;
+}
+
+// ---- 3D 雙變數掃描曲面 ----
+async function runSweep2d(){
+  const kx=document.getElementById('sweepX').value, ky=document.getElementById('sweepY').value;
+  if(kx===ky){alert('X / Y 需為不同參數');return;}
+  const btn=document.getElementById('sweepBtn'), txt=btn.textContent;
+  btn.disabled=true; btn.innerHTML='<span class="spinner" style="border-color:rgba(0,113,227,.3);border-top-color:transparent;"></span>多線程掃描 400 點中…';
+  try{
+    const r=await fetch('/api/sweep2d',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({circuit,key_x:kx,key_y:ky})});
+    const d=await r.json();
+    if(d.error){alert(d.error);return;}
+    cache[circuit]=cache[circuit]||{}; cache[circuit].sweep=d;
+    renderSurface(d);
+  }catch(e){alert('失敗: '+e);}
+  finally{btn.disabled=false; btn.textContent=txt;}
+}
+function renderSurface(d){
+  if(!window.Plotly){alert('3D 繪圖需載入 Plotly（需網路連線）');return;}
+  document.getElementById('sweepNote').textContent=`${d.n_ok}/${d.total} 點有效 · 滑鼠拖曳可 360° 旋轉`;
+  const data=[{type:'surface', x:d.x, y:d.y, z:d.z, colorscale:'Viridis',
+    contours:{z:{show:true, usecolormap:true, project:{z:true}}},
+    colorbar:{title:{text:d.z_label}, thickness:12, len:0.7}}];
+  const layout={margin:{l:0,r:0,t:6,b:0}, paper_bgcolor:'rgba(0,0,0,0)',
+    scene:{xaxis:{title:{text:d.x_label}}, yaxis:{title:{text:d.y_label}},
+           zaxis:{title:{text:d.z_label}}, camera:{eye:{x:1.7,y:-1.7,z:0.85}}},
+    font:{family:'-apple-system,BlinkMacSystemFont,sans-serif', size:11, color:'#1d1d1f'}};
+  Plotly.newPlot('surfacePlot', data, layout, {responsive:true, displaylogo:false});
+}
+function renderYield(d){
+  cache[circuit]=cache[circuit]||{};
+  cache[circuit].yieldData=d;
+  document.getElementById('yieldBox').classList.remove('hidden');
+  let note;
+  if(d.method==='DNN-10k') note=`AI 萬點預測 · ${d.n.toLocaleString()} 點 · 推論 ${d.infer_ms.toFixed(1)} ms · 製程能力 ≈ ${d.sigma_level.toFixed(1)}σ`;
+  else if(d.method==='DNN') note=`DNN 替代模型瞬算 · ${d.n} 點`;
+  else note=`ngspice 模擬 · ${d.n} 點`;
+  document.getElementById('yieldMethod').textContent=note;
+  const metric=d.metric, sc=metric==='freq'?1e9:1;
+  const unit=metric==='freq'?'GHz':metric==='tc'?'ppm/°C':'dB';
+  const yc=d.yield_pct;
+  const cards=[
+    ['平均值 Mean',(d.mean/sc).toFixed(3)+' '+unit,'blue'],
+    ['標準差 σ',(d.std/sc).toPrecision(3)+' '+unit,'purple'],
+    ['變異係數 CV',d.cv_pct.toFixed(2)+' %','teal'],
+    ['規格良率 Yield',yc.toFixed(0)+' %', yc>=90?'green':(yc>=70?'orange':'red')],
+  ];
+  document.getElementById('yieldMetrics').innerHTML=cards.map(c=>
+    `<div class="metric"><div class="k">${c[0]}</div><div class="v ${c[2]}">${c[1]}</div></div>`).join('');
+  document.getElementById('histImg').src='data:image/png;base64,'+d.hist_png;
+  // corner 表
+  document.getElementById('cornerMetricHdr').textContent=
+    metric==='gain'?'Gain':metric==='freq'?'Freq':'TC';
+  const fmtM=v=>v==null?'—':metric==='freq'?(v/1e9).toFixed(3)+'G':v.toFixed(2);
+  const sec=c=> c.pm!=null?c.pm.toFixed(1)+'°':(c.vref!=null?c.vref.toFixed(3)+'V':'—');
+  document.getElementById('cornerBody').innerHTML=['TT','FF','SS'].map(cn=>{
+    const c=d.corner[cn]; return `<tr><td>${cn}</td><td>${fmtM(c[metric])}</td><td>${sec(c)}</td></tr>`;
+  }).join('');
+}
+
+// ---- scroll reveal ----
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}}),{threshold:.12});
+function reveal(){document.querySelectorAll('[data-a]:not(.in)').forEach(el=>io.observe(el));}
+buildFamilies();
+reveal();
+apply();
+setTimeout(placePill,60);
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# 大型第三方工具 (請依 README 自行下載)
+tools/
+pdk/sky130_fd_pr/
+
+# 生成的 AI 模型 / 資料集 (可重新訓練)
+data/*.pth
+data/*.npz
+data/*.log
+
+# ngspice 暫存 / 執行檔案
+run.sp
+run.log
+wave.txt
+wave_*.txt
+sweep_*.sp
+ac_sweep.txt
+samples.csv
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# OS
+Thumbs.db
+.DS_Store

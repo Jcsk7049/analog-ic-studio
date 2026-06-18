@@ -1,0 +1,25 @@
+* 精簡版 sky130 模型庫: nfet_01v8 / pfet_01v8 / pfet_01v8_hvt
+* 來源: google/skywater-pdk-libs-sky130_fd_pr (Apache-2.0)
+* 含 tt / ff / ss 三製程角落, 供 PVT 掃描
+* 用法: .lib "pdk/sky130_minimal.lib.spice" tt   (或 ff / ss)
+
+.lib tt
+.include "sky130_fd_pr/models/parameters/invariant.spice"
+.include "sky130_fd_pr/cells/nfet_01v8/sky130_fd_pr__nfet_01v8__tt.corner.spice"
+.include "sky130_fd_pr/cells/pfet_01v8/sky130_fd_pr__pfet_01v8__tt.corner.spice"
+.include "sky130_fd_pr/cells/pfet_01v8_hvt/sky130_fd_pr__pfet_01v8_hvt__tt.corner.spice"
+.endl tt
+
+.lib ff
+.include "sky130_fd_pr/models/parameters/invariant.spice"
+.include "sky130_fd_pr/cells/nfet_01v8/sky130_fd_pr__nfet_01v8__ff.corner.spice"
+.include "sky130_fd_pr/cells/pfet_01v8/sky130_fd_pr__pfet_01v8__ff.corner.spice"
+.include "sky130_fd_pr/cells/pfet_01v8_hvt/sky130_fd_pr__pfet_01v8_hvt__ff.corner.spice"
+.endl ff
+
+.lib ss
+.include "sky130_fd_pr/models/parameters/invariant.spice"
+.include "sky130_fd_pr/cells/nfet_01v8/sky130_fd_pr__nfet_01v8__ss.corner.spice"
+.include "sky130_fd_pr/cells/pfet_01v8/sky130_fd_pr__pfet_01v8__ss.corner.spice"
+.include "sky130_fd_pr/cells/pfet_01v8_hvt/sky130_fd_pr__pfet_01v8_hvt__ss.corner.spice"
+.endl ss

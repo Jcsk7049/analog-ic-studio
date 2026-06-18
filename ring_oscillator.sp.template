@@ -1,0 +1,48 @@
+* ============================================================
+*  5-Stage Ring Oscillator (CMOS 反相器環)
+*  目標: 精準控制時鐘方波頻率
+*
+*  可調參數 (由 eda_control 填入, W 單位=公尺):
+*    {W_p}  -> 反相器 PMOS 寬度
+*    {W_n}  -> 反相器 NMOS 寬度
+*
+*  量測輸出: freq(振盪頻率, Hz)
+*  註: 規格要求 .tran 1n 100n; 為解析 GHz 方波改用 5ps 步長 / 40ns 視窗,
+*      並跳過前 15ns 啟振暫態後量測 5 個週期取平均, 精度更高。
+* ============================================================
+.title 5-Stage Ring Oscillator
+
+Vdd vdd 0 1.8
+
+.model NMOS_RO NMOS (LEVEL=1 VTO=0.45 KP=120u LAMBDA=0.05 PHI=0.7)
+.model PMOS_RO PMOS (LEVEL=1 VTO=-0.45 KP=40u  LAMBDA=0.07 PHI=0.7)
+
+* --- 反相器單元 (含負載電容決定延遲) ---
+.subckt inv in out vdd vss
+MP out in vdd vdd PMOS_RO W={W_p} L=0.5u
+MN out in vss vss NMOS_RO W={W_n} L=0.5u
+Cl out 0 20f
+.ends
+
+* --- 5 級首尾相連 (奇數級 -> 振盪) ---
+X1 n1 n2 vdd 0 inv
+X2 n2 n3 vdd 0 inv
+X3 n3 n4 vdd 0 inv
+X4 n4 n5 vdd 0 inv
+X5 n5 n1 vdd 0 inv
+
+.ic v(n1)=0                       ; 給初始不平衡以啟振
+
+* ============================================================
+*  瞬態分析與頻率量測
+* ============================================================
+.control
+  tran 5p 40n uic
+  meas tran t1 when v(n1)=0.9 td=15n rise=1     ; 跳過啟振暫態
+  meas tran t2 when v(n1)=0.9 td=15n rise=6     ; 第 6 個上升緣
+  let freq = 5 / (t2 - t1)                       ; 5 個週期平均
+  print freq
+
+  {DUMP}
+.endc
+.end
