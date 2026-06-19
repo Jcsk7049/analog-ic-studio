@@ -260,6 +260,16 @@
     </div>
   </div>
 
+  <div class="card" style="margin-top:18px;" data-a id="ftrCard">
+    <div class="sect">VCO 調諧特性（RFIC 看盤 · 掃描 Vctrl 0.4–1.8V）</div>
+    <button class="btn-ghost" id="ftrBtn" onclick="runTuning()">提取 f–Vctrl 調諧曲線 / Kvco / FTR</button>
+    <span class="mnote" id="ftrNote"></span>
+    <div id="ftrBox" class="hidden" style="margin-top:14px;">
+      <div class="grid metrics" id="ftrMetrics" style="margin-bottom:14px;"></div>
+      <img id="ftrImg" style="width:100%;border-radius:14px;border:1px solid var(--line);">
+    </div>
+  </div>
+
   <div class="card" style="margin-top:18px;" data-a>
     <div class="sect">製程 Corner 變異與蒙地卡羅良率分析</div>
     <button class="btn-ghost" id="yieldBtn" onclick="runYield()">執行良率評估（±10% 高斯 × 50 次）</button>
@@ -335,6 +345,7 @@ function apply(){
     if(cached.yieldData) renderYield(cached.yieldData);
     if(cached.sweep) renderSurface(cached.sweep);   // 還原 3D 曲面
     if(cached.pvt) renderPvt(cached.pvt);           // 還原 PVT 圖
+    if(cached.ftr) renderTuning(cached.ftr);        // 還原 VCO 調諧曲線
   }else{
     document.getElementById('results').classList.add('hidden');
   }
@@ -352,6 +363,8 @@ function setupSweep(){
   // PVT 卡: 僅 sky130 OPA / VCO 支援 (有 ff/ss 真實角落)
   const pvtOk=(circuit==='opa_sky130'||circuit==='ringosc_sky130');
   document.getElementById('pvtCard').classList.toggle('hidden',!pvtOk);
+  // FTR 調諧卡: 僅 VCO (sky130 精準環形) 支援 (Vctrl 可掃)
+  document.getElementById('ftrCard').classList.toggle('hidden',circuit!=='ringosc_sky130');
   document.getElementById('pvtBox').classList.add('hidden');
   document.getElementById('pvtNote').textContent='';
   const pb=document.getElementById('pvtBtn'); pb.disabled=false;
@@ -640,6 +653,34 @@ function renderPvt(d){
   document.getElementById('pvtMetrics').innerHTML=cards.map(c=>
     `<div class="metric"><div class="k">${c[0]}</div><div class="v ${c[2]}">${c[1]}</div></div>`).join('');
   document.getElementById('pvtImg').src='data:image/png;base64,'+d.pvt_png;
+}
+
+// ---- VCO 調諧特性 (FTR / Kvco) ----
+async function runTuning(){
+  const btn=document.getElementById('ftrBtn'), txt=btn.textContent;
+  btn.disabled=true; btn.innerHTML='<span class="spinner" style="border-color:rgba(0,113,227,.3);border-top-color:transparent;"></span>掃描 Vctrl 中…';
+  try{
+    const body={circuit, params:(lastData?lastData.final.params:undefined)};
+    const r=await fetch('/api/tuning',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.error){alert(d.error);return;}
+    cache[circuit]=cache[circuit]||{}; cache[circuit].ftr=d;
+    renderTuning(d);
+  }catch(e){alert('失敗: '+e);}
+  finally{btn.disabled=false; btn.textContent=txt;}
+}
+function renderTuning(d){
+  document.getElementById('ftrBox').classList.remove('hidden');
+  document.getElementById('ftrNote').textContent=`${d.points.length} 個有效振盪點`;
+  const cards=[
+    ['Kvco',d.kvco_mhz_v.toFixed(0)+' MHz/V','blue'],
+    ['FTR 調諧範圍',d.ftr_pct.toFixed(1)+' %', (d.ftr_pct>30?'green':'orange')],
+    ['f_min ~ f_max',(d.f_min/1e9).toFixed(2)+'~'+(d.f_max/1e9).toFixed(2)+' GHz','teal'],
+    ['f_center',(d.f_center/1e9).toFixed(2)+' GHz','purple'],
+  ];
+  document.getElementById('ftrMetrics').innerHTML=cards.map(c=>
+    `<div class="metric"><div class="k">${c[0]}</div><div class="v ${c[2]}">${c[1]}</div></div>`).join('');
+  document.getElementById('ftrImg').src='data:image/png;base64,'+d.ftr_png;
 }
 
 // ---- 3D 雙變數掃描曲面 ----
