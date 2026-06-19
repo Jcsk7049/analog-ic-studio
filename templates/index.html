@@ -352,7 +352,7 @@ function apply(){
   document.getElementById('autoChip').classList.toggle('hidden',!isMin);
   if(!isMin){document.getElementById('target').value=meta.target_default;document.getElementById('tgtUnit').textContent=meta.target_unit;}
   const hF={opa:'約束 PM ≥ 45°，可達增益窗約 49~97 dB。',bandgap:'自動搜尋 R_trim 與 N_bjt 使溫漂最小化。',ringosc:'可達頻率約 0.3~5 GHz，自動調 W_p / W_n。',lcvco:'交叉耦合 LC tank：高 Q、低相位雜訊（FoM≈−186），調諧範圍較環形窄（變容二極體）。'};
-  const hS={opa:'真實 sky130 BSIM4 模型，較慢（約 20 秒）但貼近實際製程。',bandgap:'BJT 用 sky130 真實萃取參數，溫漂更接近實矽。',ringosc:'真實 sky130 電流飢餓 VCO，自動調控制電壓 Vctrl（瞬態較慢）。'};
+  const hS={opa:'真實 sky130 BSIM4 模型，較慢（約 20 秒）但貼近實際製程。',bandgap:'BJT 用 sky130 真實萃取參數，溫漂更接近實矽。',ringosc:'真實 sky130 電流飢餓 VCO，自動調控制電壓 Vctrl（瞬態較慢）。',lcvco:'交叉耦合對/尾電流/變容皆 sky130 BSIM4（變容＝MOS-cap），電感理想化（spiral 不在 minimal lib）。'};
   document.getElementById('hint').textContent=(model==='sky130'?hS:hF)[family];
   document.getElementById('mNote').textContent=model==='sky130'
     ? '真實 130nm PDK 模型 — 慢但準，適合驗證'

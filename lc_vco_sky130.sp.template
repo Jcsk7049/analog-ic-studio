@@ -1,0 +1,48 @@
+* ============================================================
+*  LC-VCO — SkyWater sky130 真實 PDK 版 (1.8V)
+*  交叉耦合對 / 尾電流: sky130_fd_pr__nfet_01v8 (BSIM4)
+*  變容: sky130 nfet 做 MOS-cap varactor (閘極電容隨 Vctrl 變 — 真實 PDK 做法)
+*  電感: 理想 L + 串聯 Rs 設 Q (sky130 spiral inductor 模型不在 minimal lib)
+*  Vctrl 調 MOS-cap 偏壓 -> 容值 -> 諧振頻率
+*  注意: .option scale 不可置首行 (會被當標題)
+* ============================================================
+.title LC-VCO sky130
+.option scale=1u
+.lib "pdk/sky130_minimal.lib.spice" tt
+
+Vdd   vdd 0 1.8
+Vctrl ctrl 0 1.8
+Vnb   nb 0 0.7
+
+* --- 尾電流源 ---
+XMtail ntail nb 0 0 sky130_fd_pr__nfet_01v8 L={L_tail} W={W_tail}
+
+* --- 交叉耦合負 gm 對 ---
+XM1 outp outn ntail 0 sky130_fd_pr__nfet_01v8 L={L_sw} W={W_sw}
+XM2 outn outp ntail 0 sky130_fd_pr__nfet_01v8 L={L_sw} W={W_sw}
+
+* --- LC tank: 理想電感 + 串聯電阻設 Q ---
+L1 vdd a1 {L_ind}
+Rs1 a1 outp 5
+L2 vdd a2 {L_ind}
+Rs2 a2 outn 5
+C1 outp 0 {C_fix}
+C2 outn 0 {C_fix}
+
+* --- MOS-cap 變容 (sky130 nfet: 閘極接 tank, D/S/B 接 ctrl; Cgg 隨 Vctrl 變) ---
+XMv1 ctrl outp ctrl ctrl sky130_fd_pr__nfet_01v8 L={L_var} W={W_var}
+XMv2 ctrl outn ctrl ctrl sky130_fd_pr__nfet_01v8 L={L_var} W={W_var}
+
+.ic v(outp)=1.8 v(outn)=0.2
+
+.tran 0.01n 40n
+
+.control
+  tran 0.002n 30n uic
+  meas tran t1 when v(outp)=v(outn) td=18n rise=1
+  meas tran t2 when v(outp)=v(outn) td=18n rise=6
+  let freq = 5 / (t2 - t1)
+  print freq
+  {DUMP}
+.endc
+.end

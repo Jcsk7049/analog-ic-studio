@@ -148,16 +148,17 @@ def _vco_config():
 _VCO_KEYS, _VCO_PH, _VCO_RNG, _VCO_PARAMS, _VCO_START = _vco_config()
 
 
-def _wl(suf, dev, wr, lr, w0, l0):
-    """產生一組 W/L 參數設定 (device 分組供前端雙欄表)。回傳 (keys, ph, rng, params, start)。"""
+def _wl(suf, dev, wr, lr, w0, l0, ns=1):
+    """產生一組 W/L 參數設定 (device 分組供前端雙欄表)。回傳 (keys, ph, rng, params, start)。
+       ns=net_scale: fast(Level-1, 公尺)用 1; sky130(.option scale=1u, 微米)用 1e6。"""
     wk, lk = f"W_{suf}", f"L_{suf}"
     ph = {wk: "{W_" + suf + "}", lk: "{L_" + suf + "}"}
     rng = {wk: wr, lk: lr}
     params = {
         wk: {"label": f"{dev} W", "device": dev, "dim": "W", "unit": "µm",
-             "scale": 1e6, "net_scale": 1, "fmt": "{:.2f}"},
+             "scale": 1e6, "net_scale": ns, "fmt": "{:.2f}"},
         lk: {"label": f"{dev} L", "device": dev, "dim": "L", "unit": "µm",
-             "scale": 1e6, "net_scale": 1, "fmt": "{:.3f}"},
+             "scale": 1e6, "net_scale": ns, "fmt": "{:.3f}"},
     }
     return [wk, lk], ph, rng, params, {wk: w0, lk: l0}
 
@@ -208,6 +209,15 @@ _LC_KEYS, _LC_PH, _LC_RNG, _LC_PARAMS, _LC_START = _merge(
     _scalar("L_ind", "L 電感",    "{L_ind}", (0.5e-9, 5e-9),   1e9,  "{:.2f}nH", 2e-9),
     _scalar("C_fix", "C_fix 固定", "{C_fix}", (0.1e-12, 1e-12), 1e12, "{:.2f}pF", 0.4e-12),
     _scalar("C_var", "C_var 變容", "{C_var}", (0.2e-12, 1.5e-12), 1e12, "{:.2f}pF", 0.8e-12),
+)
+
+# LC-VCO sky130: 交叉耦合/尾電流/變容皆 sky130 BSIM4 (ns=1e6), 電感理想
+_LCS_KEYS, _LCS_PH, _LCS_RNG, _LCS_PARAMS, _LCS_START = _merge(
+    _wl("sw",   "XM1,XM2 交叉耦合", (10e-6, 100e-6), (0.15e-6, 1e-6), 40e-6, 0.18e-6, ns=1e6),
+    _wl("tail", "XMtail 尾電流",    (20e-6, 200e-6), (0.3e-6, 2e-6),  80e-6, 0.5e-6, ns=1e6),
+    _wl("var",  "XMv 變容",         (5e-6, 60e-6),   (0.3e-6, 2e-6),  20e-6, 0.5e-6, ns=1e6),
+    _scalar("L_ind", "L 電感",  "{L_ind}", (0.5e-9, 5e-9),   1e9,  "{:.2f}nH", 2e-9),
+    _scalar("C_fix", "C_fix 固定", "{C_fix}", (0.05e-12, 0.8e-12), 1e12, "{:.2f}pF", 0.2e-12),
 )
 
 
@@ -361,6 +371,28 @@ CIRCUITS = {
         "target_scale": 1e9,
         "target_default": 3.4,
         "start": _LC_START,
+        "waveform": "wave",
+    },
+    "lcvco_sky130": {
+        "label": "LC-VCO · sky130 精準",
+        "family": "lcvco", "model": "sky130",
+        "template": "lc_vco_sky130.sp.template",
+        "param_keys": _LCS_KEYS,
+        "placeholders": _LCS_PH,
+        "ranges": _LCS_RNG,
+        "params": _LCS_PARAMS,
+        "parser": _parse_ringosc,
+        "dump": "wrdata wave.txt v(outp)",
+        "objective": "target",
+        "metric": "freq",
+        "optimizer": "multivar",
+        "tank_q": 10.0,
+        "vdd": 1.8,
+        "target_label": "目標頻率 (GHz)",
+        "target_unit": "GHz",
+        "target_scale": 1e9,
+        "target_default": 3.0,
+        "start": _LCS_START,
         "waveform": "wave",
     },
 }
