@@ -77,9 +77,16 @@ def _parse_opa(log):
     gain = _grab(r"^gain\s*=\s*([-\d.eE+]+)", log)
     ugf = _grab(r"^ugf\s*=\s*([-\d.eE+]+)", log)
     pm = _grab(r"^pm\s*=\s*([-\d.eE+]+)", log)
-    return {"gain": gain, "ugf": ugf, "pm": pm,
-            "converged": (not _bad(log)) and gain is not None,
-            "ok": gain is not None and not _bad(log)}
+    r = {"gain": gain, "ugf": ugf, "pm": pm,
+         "converged": (not _bad(log)) and gain is not None,
+         "ok": gain is not None and not _bad(log)}
+    # op-point 元件參數 (若範本有 print, 供 Slew/擺幅/ICMR 解析式計算)
+    for dev, par in (("m5", "id"), ("m5", "vdsat"), ("m6", "vdsat"),
+                     ("m7", "vdsat"), ("m1", "vgs"), ("m3", "vgs")):
+        v = _grab(rf"@{dev}\[{par}\]\s*=\s*([-\d.eE+]+)", log)
+        if v is not None:
+            r[f"{dev}_{par}"] = v
+    return r
 
 
 def _parse_bandgap(log):
@@ -483,6 +490,34 @@ def vco_tuning(circuit, params, n=9, vlo=0.4, vhi=1.8):
             "kvco_mhz_v": float(kvco),
             "ftr_pct": float(100.0 * (fmax - fmin) / fc),
             "f_min": fmin, "f_max": fmax, "f_center": fc}
+
+
+def opa_metrics(circuit, params):
+    """OPA 進階指標 (補齊 gain/UGF/PM 之外的設計常用規格):
+       Slew Rate = I_tail/Cc (解析); 輸出擺幅 / ICMR 由 op-point Vdsat 餘裕推算;
+       PSRR 由一次『AC 打在電源』的額外模擬取得。僅 fast OPA (op 查詢名稱相符)。"""
+    import uuid
+    if circuit != "opa":
+        return {"error": "進階指標目前僅支援『兩級 OPA · 快速模型』(sky130 子電路 op 查詢名稱不同)"}
+    VDD = 3.3
+    base = run_circuit(circuit, params)
+    need = ("m5_id", "m6_vdsat", "m7_vdsat", "m5_vdsat", "m1_vgs", "m3_vgs")
+    cc = params.get("C_miller")
+    if not base.get("ok") or not cc or any(k not in base for k in need):
+        return {"error": "標稱模擬未收斂或缺 op-point 參數"}
+    sr = base["m5_id"] / cc                                  # V/s (壓擺率 = 尾電流/補償電容)
+    sw_lo, sw_hi = base["m7_vdsat"], VDD - abs(base["m6_vdsat"])
+    icmr_lo = base["m5_vdsat"] + base["m1_vgs"]              # 尾電流源 + 差動對 Vgs
+    icmr_hi = VDD - abs(base["m3_vgs"])                      # 上方鏡像 Vsg 餘裕 (估)
+    # PSRR: AC 源從輸入搬到電源, 量電源->輸出增益 Asup; PSRR = Adm - Asup (dB)
+    sup = run_isolated(circuit, params, tag=f"psrr_{uuid.uuid4().hex[:8]}",
+                       replaces=[("Vsig inn  0   DC {VCM_V} AC 1", "Vsig inn  0   DC {VCM_V} AC 0"),
+                                 ("Vdd  vdd  0   DC {VDD_V}", "Vdd  vdd  0   DC {VDD_V} AC 1")])
+    psrr = (base["gain"] - sup["gain"]) if sup.get("gain") is not None else None
+    return {"circuit": circuit, "gain_db": base["gain"], "pm_deg": base.get("pm"),
+            "slew_v_us": sr / 1e6, "swing_lo": sw_lo, "swing_hi": sw_hi,
+            "swing_vpp": sw_hi - sw_lo, "icmr_lo": icmr_lo, "icmr_hi": icmr_hi,
+            "icmr_vpp": icmr_hi - icmr_lo, "psrr_db": psrr, "vdd": VDD}
 
 
 def run_waveform(circuit, params):

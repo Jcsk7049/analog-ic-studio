@@ -37,6 +37,12 @@ CL   out  0    5p
   print gain
   print ugf
   print pm
+  print @m5[id]
+  print @m5[vdsat]
+  print @m6[vdsat]
+  print @m7[vdsat]
+  print @m1[vgs]
+  print @m3[vgs]
   {DUMP}
 .endc
 .end

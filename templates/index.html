@@ -260,6 +260,15 @@
     </div>
   </div>
 
+  <div class="card" style="margin-top:18px;" data-a id="opaMetCard">
+    <div class="sect">OPA 進階指標（Slew Rate · 輸出擺幅 · ICMR · PSRR）</div>
+    <button class="btn-ghost" id="opaMetBtn" onclick="runOpaMetrics()">計算進階規格</button>
+    <span class="mnote" id="opaMetNote"></span>
+    <div id="opaMetBox" class="hidden" style="margin-top:14px;">
+      <div class="grid metrics" id="opaMetMetrics"></div>
+    </div>
+  </div>
+
   <div class="card" style="margin-top:18px;" data-a id="ftrCard">
     <div class="sect">VCO 調諧特性（RFIC 看盤 · 掃描 Vctrl 0.4–1.8V）</div>
     <button class="btn-ghost" id="ftrBtn" onclick="runTuning()">提取 f–Vctrl 調諧曲線 / Kvco / FTR</button>
@@ -346,6 +355,7 @@ function apply(){
     if(cached.sweep) renderSurface(cached.sweep);   // 還原 3D 曲面
     if(cached.pvt) renderPvt(cached.pvt);           // 還原 PVT 圖
     if(cached.ftr) renderTuning(cached.ftr);        // 還原 VCO 調諧曲線
+    if(cached.opaMet) renderOpaMetrics(cached.opaMet); // 還原 OPA 進階指標
   }else{
     document.getElementById('results').classList.add('hidden');
   }
@@ -365,6 +375,8 @@ function setupSweep(){
   document.getElementById('pvtCard').classList.toggle('hidden',!pvtOk);
   // FTR 調諧卡: 僅 VCO (sky130 精準環形) 支援 (Vctrl 可掃)
   document.getElementById('ftrCard').classList.toggle('hidden',circuit!=='ringosc_sky130');
+  // OPA 進階指標卡: 僅 fast OPA (op-point 查詢名稱相符)
+  document.getElementById('opaMetCard').classList.toggle('hidden',circuit!=='opa');
   document.getElementById('pvtBox').classList.add('hidden');
   document.getElementById('pvtNote').textContent='';
   const pb=document.getElementById('pvtBtn'); pb.disabled=false;
@@ -653,6 +665,33 @@ function renderPvt(d){
   document.getElementById('pvtMetrics').innerHTML=cards.map(c=>
     `<div class="metric"><div class="k">${c[0]}</div><div class="v ${c[2]}">${c[1]}</div></div>`).join('');
   document.getElementById('pvtImg').src='data:image/png;base64,'+d.pvt_png;
+}
+
+// ---- OPA 進階指標 ----
+async function runOpaMetrics(){
+  const btn=document.getElementById('opaMetBtn'), txt=btn.textContent;
+  btn.disabled=true; btn.innerHTML='<span class="spinner" style="border-color:rgba(0,113,227,.3);border-top-color:transparent;"></span>計算中…';
+  try{
+    const body={circuit, params:(lastData?lastData.final.params:undefined)};
+    const r=await fetch('/api/opa_metrics',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.error){alert(d.error);return;}
+    cache[circuit]=cache[circuit]||{}; cache[circuit].opaMet=d;
+    renderOpaMetrics(d);
+  }catch(e){alert('失敗: '+e);}
+  finally{btn.disabled=false; btn.textContent=txt;}
+}
+function renderOpaMetrics(d){
+  document.getElementById('opaMetBox').classList.remove('hidden');
+  const cards=[
+    ['Slew Rate',d.slew_v_us.toFixed(2)+' V/µs','blue'],
+    ['輸出擺幅',d.swing_vpp.toFixed(2)+' Vpp', (d.swing_vpp>d.vdd*0.8?'green':'orange')],
+    ['輸出範圍',d.swing_lo.toFixed(2)+'~'+d.swing_hi.toFixed(2)+' V','teal'],
+    ['ICMR',d.icmr_vpp.toFixed(2)+' Vpp ('+d.icmr_lo.toFixed(2)+'~'+d.icmr_hi.toFixed(2)+'V)','purple'],
+    ['PSRR',(d.psrr_db!=null?d.psrr_db.toFixed(1):'-')+' dB', (d.psrr_db>60?'green':'orange')],
+  ];
+  document.getElementById('opaMetMetrics').innerHTML=cards.map(c=>
+    `<div class="metric"><div class="k">${c[0]}</div><div class="v ${c[2]}">${c[1]}</div></div>`).join('');
 }
 
 // ---- VCO 調諧特性 (FTR / Kvco) ----

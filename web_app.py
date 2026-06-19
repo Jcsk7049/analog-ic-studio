@@ -393,6 +393,19 @@ def api_tuning():
     return jsonify(r)
 
 
+@app.route("/api/opa_metrics", methods=["POST"])
+def api_opa_metrics():
+    """OPA 進階指標: Slew Rate / 輸出擺幅 / ICMR / PSRR (補齊 gain/UGF/PM)。"""
+    data = request.get_json(force=True)
+    circuit = data.get("circuit", "opa")
+    params = data.get("params")
+    if params:
+        params = {k: float(params[k]) for k in CIRCUITS[circuit]["param_keys"]}
+    else:
+        params = CIRCUITS[circuit]["start"]
+    return jsonify(eda.opa_metrics(circuit, params))
+
+
 @app.route("/api/netlist")
 def api_netlist():
     circuit = request.args.get("circuit", "opa")
