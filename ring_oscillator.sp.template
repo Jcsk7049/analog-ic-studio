@@ -1,7 +1,9 @@
 .title 3-Stage Ring Oscillator (instance-level W/L)
 Vdd vdd 0 1.8
-.model NMOS_RO NMOS (LEVEL=1 VTO=0.45 KP=120u LAMBDA=0.05 PHI=0.7)
-.model PMOS_RO PMOS (LEVEL=1 VTO=-0.45 KP=40u  LAMBDA=0.07 PHI=0.7)
+* TOX -> 閘極電容 Cox*W*L (Meyer), CGSO/CGDO -> overlap 電容 (∝W): 寄生隨尺寸縮放
+* 使 self-loading 物理浮現 (W 放大時驅動電流與負載電容同步增加, 頻率飽和而非單調上升)
+.model NMOS_RO NMOS (LEVEL=1 VTO=0.45 KP=120u LAMBDA=0.05 PHI=0.7 TOX=8n CGSO=3e-10 CGDO=3e-10)
+.model PMOS_RO PMOS (LEVEL=1 VTO=-0.45 KP=40u  LAMBDA=0.07 PHI=0.7 TOX=8n CGSO=3e-10 CGDO=3e-10)
 * 3 級反相器環 (Vout->o1->o2->Vout), 每顆 MOS 獨立 W/L
 M0p o1   Vout vdd vdd PMOS_RO W={W_M0p} L={L_M0p}
 M0n o1   Vout 0   0   NMOS_RO W={W_M0n} L={L_M0n}
@@ -9,9 +11,10 @@ M1p o2   o1   vdd vdd PMOS_RO W={W_M1p} L={L_M1p}
 M1n o2   o1   0   0   NMOS_RO W={W_M1n} L={L_M1n}
 M2p Vout o2   vdd vdd PMOS_RO W={W_M2p} L={L_M2p}
 M2n Vout o2   0   0   NMOS_RO W={W_M2n} L={L_M2n}
-Cl1 o1   0 30f
-Cl2 o2   0 30f
-Cl3 Vout 0 30f
+* 佈線殘量電容 (主負載已由上方元件閘極/overlap 寄生提供)
+Cl1 o1   0 2f
+Cl2 o2   0 2f
+Cl3 Vout 0 2f
 .ic v(o1)=0 v(o2)=1.8 v(Vout)=0
 .control
   tran 2p 30n uic

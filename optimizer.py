@@ -27,6 +27,26 @@ PENALTY = 99999.0
 TOL = 0.005            # 0.5%
 
 
+# ----------------------------------------------------------------------
+# 反相器 Wp/Wn 物理護欄 (電子遷移率 ~2-3x 電洞 -> 對稱反相器需 Wp = 2~3 x Wn)
+# 在算法邊界硬鎖, 保證 Agent 不會跑出 NMOS>PMOS 的非物理解 (Duty 偏 50%)
+# ----------------------------------------------------------------------
+def _inv_pairs(keys):
+    """找出反相器 P/N 配對: W_<base>p <-> W_<base>n (偏壓群 W_Mbias 等不成對, 自動排除)。"""
+    bases = {k[2:-1] for k in keys if k.startswith("W_") and k.endswith("p")}
+    return [(f"W_{b}p", f"W_{b}n") for b in sorted(bases) if f"W_{b}n" in keys]
+
+
+def _inv_guard(keys, p, ranges=None, lo=2.0, hi=3.0):
+    """把每個反相器的 Wp 夾進 [lo,hi]*Wn; 若給 ranges 再夾回參數範圍。"""
+    out = dict(p)
+    for wp, wn in _inv_pairs(keys):
+        out[wp] = min(max(out[wp], lo * out[wn]), hi * out[wn])
+        if ranges and wp in ranges:
+            out[wp] = min(max(out[wp], ranges[wp][0]), ranges[wp][1])
+    return out
+
+
 def run_vco_optimization(circuit, target=None, max_workers=8):
     c = CIRCUITS[circuit]
     keys = c["param_keys"]
@@ -46,7 +66,7 @@ def run_vco_optimization(circuit, target=None, max_workers=8):
         key = tuple(np.round(xn, 4))
         if key in cache:
             return cache[key]
-        params = {k: float(v) for k, v in zip(keys, denorm(xn))}
+        params = _inv_guard(keys, {k: float(v) for k, v in zip(keys, denorm(xn))}, c["ranges"])
         r = eda.run_isolated(circuit, params, tag=f"de_{uuid.uuid4().hex[:10]}")
         f = r.get(metric) if r.get("ok") else None
         cache[key] = f
@@ -78,7 +98,7 @@ def run_vco_optimization(circuit, target=None, max_workers=8):
     if nm.fun < best_L:
         best_x, best_L = nm.x, nm.fun
 
-    best_params = {k: float(v) for k, v in zip(keys, denorm(best_x))}
+    best_params = _inv_guard(keys, {k: float(v) for k, v in zip(keys, denorm(best_x))}, c["ranges"])
     freq = sim_freq(best_x)
     err_pct = 100 * (freq - tgt) / tgt if freq else 100.0
     converged = freq is not None and abs(err_pct) < TOL * 100
@@ -163,7 +183,7 @@ def run_multivar(circuit, target=None, workers=8):
     is_vco = c["template"].startswith("vco")          # 瞬態慢 -> 小預算
 
     def obj(x):
-        p = {k: float(x[i]) for i, k in enumerate(keys)}
+        p = _inv_guard(keys, {k: float(x[i]) for i, k in enumerate(keys)}, c["ranges"])
         return _mv_loss(circuit, eda.run_isolated(circuit, p, uuid.uuid4().hex[:8]), tgt)
 
     maxiter, popsize = (6, 4) if is_vco else (25, 12)
@@ -174,7 +194,7 @@ def run_multivar(circuit, target=None, workers=8):
     nm = minimize(obj, de.x, method="Nelder-Mead",
                   options={"maxiter": 40 if is_vco else 120, "fatol": 1e-9, "xatol": 1e-9})
     bx = nm.x if nm.fun <= de.fun else de.x
-    best = {k: float(np.clip(bx[i], *bounds[i])) for i, k in enumerate(keys)}
+    best = _inv_guard(keys, {k: float(np.clip(bx[i], *bounds[i])) for i, k in enumerate(keys)}, c["ranges"])
     ver = eda.run_circuit(circuit, best)
     prim = ver.get(c["metric"])
 

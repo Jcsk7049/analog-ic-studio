@@ -459,6 +459,32 @@ def run_isolated(circuit, params, tag, inject="", dump_vec=None, replaces=None):
     return res
 
 
+def vco_tuning(circuit, params, n=9, vlo=0.4, vhi=1.8):
+    """掃描 Vctrl 提取 VCO 調諧特性 (RFIC 核心): f-Vctrl 曲線 / Kvco / FTR。
+       做法: 用 replaces 把範本固定的 'Vctrl ctrl 0 1.8' 換成各掃描電壓。
+       回傳 {points:[(v,f_hz)], kvco_mhz_v, ftr_pct, f_min, f_max, f_center}。"""
+    import uuid
+    pts = []
+    for i in range(n):
+        v = vlo + (vhi - vlo) * i / (n - 1)
+        r = run_isolated(circuit, params, tag=f"ftr_{uuid.uuid4().hex[:8]}",
+                         replaces=[("Vctrl ctrl 0 1.8", f"Vctrl ctrl 0 {v:.4f}")])
+        f = r.get("freq") if r.get("ok") else None
+        if f and f > 0:
+            pts.append((round(v, 4), float(f)))
+    if len(pts) < 2:
+        return {"error": "Vctrl 掃描全程未起振 (偏壓不足)", "points": pts}
+    fs = [f for _, f in pts]
+    fmin, fmax = min(fs), max(fs)
+    fc = 0.5 * (fmin + fmax)
+    # Kvco = 線性區平均斜率 (端點差/電壓跨距), 單位 MHz/V
+    kvco = (pts[-1][1] - pts[0][1]) / (pts[-1][0] - pts[0][0]) / 1e6
+    return {"circuit": circuit, "points": pts,
+            "kvco_mhz_v": float(kvco),
+            "ftr_pct": float(100.0 * (fmax - fmin) / fc),
+            "f_min": fmin, "f_max": fmax, "f_center": fc}
+
+
 def run_waveform(circuit, params):
     """跑一次並回傳圖表資料; 波形為空且為 flaky 崩潰時自動重試。"""
     rows = []

@@ -359,6 +359,40 @@ def api_pvt():
                     "robustness": r["robustness"], "pvt_png": png})
 
 
+def make_ftr_png(tun):
+    """VCO 調諧曲線 f-Vctrl (RFIC 看盤, 英文標籤)。"""
+    pts = tun.get("points") or []
+    if len(pts) < 2:
+        return None
+    _fig()
+    vs = [v for v, _ in pts]; fs = [f / 1e9 for _, f in pts]
+    fig, ax = plt.subplots(figsize=(6.6, 3.8)); _style(ax)
+    ax.plot(vs, fs, color=_TEAL, lw=2.2, marker="o", ms=4)
+    ax.set_xlabel("Control Voltage Vctrl (V)"); ax.set_ylabel("Frequency (GHz)")
+    ax.set_title(f"Kvco~{tun['kvco_mhz_v']:.0f} MHz/V   FTR~{tun['ftr_pct']:.1f}%",
+                 color="#1d1d1f", fontsize=11)
+    return _b64(fig)
+
+
+@app.route("/api/tuning", methods=["POST"])
+def api_tuning():
+    """VCO 調諧特性: 掃描 Vctrl 提取 f-Vctrl 曲線 / Kvco / FTR (僅 VCO)。"""
+    data = request.get_json(force=True)
+    circuit = data.get("circuit", "ringosc_sky130")
+    if "vco" not in CIRCUITS[circuit]["template"]:
+        return jsonify({"error": "調諧分析僅支援 VCO（ringosc · sky130 精準）"}), 200
+    params = data.get("params")
+    if params:
+        params = {k: float(params[k]) for k in CIRCUITS[circuit]["param_keys"]}
+    else:
+        params = CIRCUITS[circuit]["start"]
+    r = eda.vco_tuning(circuit, params)
+    if "error" in r:
+        return jsonify(r), 200
+    r["ftr_png"] = make_ftr_png(r)
+    return jsonify(r)
+
+
 @app.route("/api/netlist")
 def api_netlist():
     circuit = request.args.get("circuit", "opa")

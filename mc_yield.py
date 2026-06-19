@@ -28,6 +28,27 @@ YIELD_TOL = 0.05      # target 模式: 主指標落在 ±5% 視為良品
 TC_SPEC = 50.0        # bandgap: TC < 50 ppm/°C 視為良品
 PM_SPEC = 45.0        # opa: 相位裕度需 >= 45°
 
+# --- 變異模型 (Pelgrom): 良率 = 全域製程 + 隨機失配, 失配 σ ∝ 1/sqrt(W·L) ---
+AVT_REL = 0.025       # 1µm² 元件的等效 Vth 失配相對 σ (~AVT/Vov); 元件越大越匹配
+SIGMA_PROC = 0.03     # 全域製程變異 (ΔL/Δtox/ΔVth, 同一晶片所有元件共用)
+L_ASSUMED = 0.5e-6    # 範本將 L 焊死 (未列為參數) 的元件假設通道長
+
+
+def _mismatch_sigma(circuit, params):
+    """每個參數的隨機失配相對 σ。寬度型 ∝ 1/sqrt(W·L) (Pelgrom: 大元件更匹配);
+       長度型與被動元件 (R/N) 不計隨機失配, 僅受全域製程。回傳與 param_keys 同序陣列。"""
+    keys = CIRCUITS[circuit]["param_keys"]
+    sig = []
+    for k in keys:
+        if not (k.startswith("W_") or k.startswith("w_")):
+            sig.append(0.0); continue
+        base = k[2:]
+        lk = next((x for x in keys if x in (f"L_{base}", f"l_{base}")), None)
+        L = params[lk] if lk else L_ASSUMED
+        area_um2 = max(params[k] * L * 1e12, 1e-3)        # W·L -> µm²
+        sig.append(AVT_REL / (area_um2 ** 0.5))
+    return np.array(sig)
+
 
 def _has_surrogate(circuit):
     # 僅 sky130 精準模式用 DNN 加速 (ngspice 慢); 快速電路 ngspice 本就快又準
@@ -67,7 +88,12 @@ def monte_carlo(circuit, params, target=None, n=50, sigma=0.10, seed=0, engine="
 
     rng = np.random.RandomState(seed)
     base = np.array([params[k] for k in keys])
-    M = _clamp_matrix(circuit, base * (1 + sigma * rng.randn(n, len(keys))))
+    # Pelgrom 雙成分: 全域製程 (n×1, 全元件共用) + 隨機失配 (n×K, 各自獨立, σ∝1/√WL)
+    mm = _mismatch_sigma(circuit, params)
+    scale = sigma / 0.10                                   # 沿用 sigma 當整體變異倍率 (預設 1.0)
+    proc = SIGMA_PROC * scale * rng.randn(n, 1)
+    dev = (mm * scale) * rng.randn(n, len(keys))
+    M = _clamp_matrix(circuit, base * (1 + proc + dev))
 
     use_sur = (engine == "surrogate") or (engine == "auto" and _has_surrogate(circuit))
     cols = {}
