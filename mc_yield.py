@@ -130,28 +130,36 @@ def monte_carlo(circuit, params, target=None, n=50, sigma=0.10, seed=0, engine="
 
 
 def corner_analysis(circuit, params, target=None):
-    """三製程角落 TT / FF / SS (參數級一階近似: FF 元件偏強, SS 偏弱)。"""
+    """三製程角落 TT / FF / SS。
+       有 sky130 .lib 的電路 -> 切換真實 tt/ff/ss 角落檔 (與 PVT 一致);
+       fast/Level-1 (無角落檔) -> 全域偏移代理 (FF: W↑L↓ 偏快 / SS: W↓L↑ 偏慢)。"""
+    import os, uuid
     c = CIRCUITS[circuit]
     keys = c["param_keys"]
     metric = c["metric"]
-    corners = {"TT": 0.0, "FF": +0.10, "SS": -0.10}
-    use_sur = _has_surrogate(circuit)
-    sur = None
-    if use_sur:
-        import dl_surrogate as dl
-        sur = dl.Surrogate(circuit)
+    with open(os.path.join(BASE_DIR, c["template"]), encoding="utf-8") as f:
+        has_lib = '.lib.spice" tt' in f.read()
+
+    def _row(m):
+        return {metric: m.get(metric), "pm": m.get("pm"), "vref": m.get("vref"), "ok": bool(m.get("ok"))}
 
     out = {}
-    for name, d in corners.items():
-        p = _clamp_matrix(circuit, np.array([params[k] for k in keys]) * (1 + d)).reshape(1, -1)
-        if use_sur:
-            y = sur.predict(p)[0]
-            row = {t: float(y[j]) for j, t in enumerate(sur.targets)}
-            row["ok"] = True
-        else:
-            m = eda.run_circuit(circuit, {k: p[0, j] for j, k in enumerate(keys)})
-            row = {metric: m.get(metric), "pm": m.get("pm"), "vref": m.get("vref"), "ok": bool(m.get("ok"))}
-        out[name] = row
+    if has_lib:                                          # 真實製程角落 (BSIM4 模型卡)
+        for name, cor in (("TT", "tt"), ("FF", "ff"), ("SS", "ss")):
+            rep = [] if cor == "tt" else [('.lib.spice" tt', f'.lib.spice" {cor}')]
+            out[name] = _row(eda.run_isolated(circuit, params, tag=f"cor_{uuid.uuid4().hex[:8]}", replaces=rep))
+    else:                                                # Level-1 一階近似: 全域偏移 (corner=全元件同向)
+        for name, s in (("TT", 0), ("FF", +1), ("SS", -1)):
+            p = {}
+            for k in keys:
+                if k.startswith(("W_", "w_")):
+                    p[k] = params[k] * (1 + 0.10 * s)    # FF 偏寬 (強), SS 偏窄 (弱)
+                elif k.startswith(("L_", "l_")):
+                    p[k] = params[k] * (1 - 0.10 * s)    # FF 偏短 (快), SS 偏長 (慢)
+                else:
+                    p[k] = params[k]
+            p = {k: float(v) for k, v in zip(keys, _clamp_matrix(circuit, np.array([p[k] for k in keys])))}
+            out[name] = _row(eda.run_circuit(circuit, p))
     return {"circuit": circuit, "metric": metric, "corners": out, "target": target}
 
 
