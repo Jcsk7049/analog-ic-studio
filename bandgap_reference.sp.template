@@ -18,9 +18,17 @@ MP1 n1   g vdd vdd PMOS_BG W={W_Pmirror} L={L_Pmirror}
 MP2 n2   g vdd vdd PMOS_BG W={W_Pmirror} L={L_Pmirror}
 MP3 vref g vdd vdd PMOS_BG W={W_Pmirror} L={L_Pmirror}
 
-* --- 理想運算放大器: 強制 V(n1)=V(n2), 輸出驅動鏡像閘極 ---
-*     負回授: n1>n2 -> g 下降 -> 鏡像電流上升 -> n2 追上
-Bop g 0 V = 1.65 - 1e5*(V(n1)-V(n2))
+* --- 真實 5T CMOS OTA (低 Vth NMOS 輸入對 + PMOS 鏡像負載) 取代理想行為級運放 ---
+*     輸出 g 經 PMOS 上拉可逼近 vdd, 才足以節流鏡像 (PMOS 輸入對輸出擺幅不足會鎖死)
+*     負回授: n1↑ -> Moa2 電流↑ -> g↓ -> 鏡像 Vsg↑ -> 電流↑ -> n2(=Vbe+IR1) 追上 n1
+*     ponytail: 尾電流用電阻 (簡化, 真實設計應換 cascode 電流源以提升 PSRR)
+Rtail ntail 0 60k
+Moa1 d1 n2 ntail 0   NMOS_OA W=20u L=1u
+Moa2 g  n1 ntail 0   NMOS_OA W=20u L=1u
+Moa3 d1 d1 vdd vdd   PMOS_BG W=10u L=1u
+Moa4 g  d1 vdd vdd   PMOS_BG W=10u L=1u
+* --- Startup: 弱下拉避免 g 卡在 vdd 的零電流簡併態 (運作後 OTA 主導 g) ---
+Rsu g 0 8MEG
 
 * --- 支路1: 二極體接法 PNP (面積 1) ---
 Q1 0 0 n1 PNP_BG 1
@@ -35,9 +43,10 @@ Q3 0 0 e3 PNP_BG 1
 
 * --- 元件模型 ---
 .model PMOS_BG PMOS (LEVEL=1 VTO=-0.7 KP=40u LAMBDA=0.02 PHI=0.7)
+.model NMOS_OA NMOS (LEVEL=1 VTO=0.45 KP=120u LAMBDA=0.04 PHI=0.7)
 .model PNP_BG  PNP  (IS=1e-17 BF=5)
 
-.nodeset v(n1)=0.65 v(n2)=0.65 v(g)=1.6 v(vref)=1.2
+.nodeset v(n1)=0.65 v(n2)=0.65 v(g)=2.4 v(vref)=1.2 v(ntail)=0.3 v(d1)=2.4
 
 * ============================================================
 *  溫度掃描分析與溫漂量測
