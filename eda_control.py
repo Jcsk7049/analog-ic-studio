@@ -187,6 +187,16 @@ _OPA_KEYS, _OPA_PH, _OPA_RNG, _OPA_PARAMS, _OPA_START = _merge(
     _scalar("R_zero", "Rz", "{R_zero}", (50.0, 5e3), 1, "{:.0f}ohm", 1e3),
 )
 
+# sky130 精準 OPA: 同 fast 分組但 ns=1e6 (微米), L 下限 0.15µm 製程極限
+_OPAS_KEYS, _OPAS_PH, _OPAS_RNG, _OPAS_PARAMS, _OPAS_START = _merge(
+    _wl("M1", "XM1,XM2",    (4e-6, 60e-6),  (0.18e-6, 1.5e-6), 10e-6, 0.5e-6, ns=1e6),
+    _wl("M3", "XM3,XM4",    (4e-6, 60e-6),  (0.18e-6, 1.5e-6), 10e-6, 0.5e-6, ns=1e6),
+    _wl("M5", "XM5,XM7,XM8",(4e-6, 80e-6),  (0.18e-6, 1.5e-6), 20e-6, 0.5e-6, ns=1e6),
+    _wl("M6", "XM6",        (4e-6, 100e-6), (0.18e-6, 1.5e-6), 30e-6, 0.5e-6, ns=1e6),
+    _scalar("C_miller", "Cc", "{C_miller}", (0.3e-12, 5e-12), 1e12, "{:.2f}pF", 1e-12),
+    _scalar("R_zero", "Rz", "{R_zero}", (50.0, 5e3), 1, "{:.0f}ohm", 1e3),
+)
+
 # 快速環形振盪器: 3 級 6 顆反相器 MOS 各自 W/L (Level-1)
 _RING_KEYS, _RING_PH, _RING_RNG, _RING_PARAMS, _RING_START = _merge(*[
     _wl(suf, dev, (1e-6, 30e-6), (0.18e-6, 1e-6),
@@ -247,25 +257,21 @@ CIRCUITS = {
         "label": "OPA · sky130 精準",
         "family": "opa", "model": "sky130",
         "template": "two_stage_opa_sky130.sp.template",
-        "param_keys": ["w_diff", "w_stage2", "r_bias"],
-        "placeholders": {"w_diff": "{W_diff}", "w_stage2": "{W_stage2}", "r_bias": "{R_bias}"},
-        "ranges": {"w_diff": (4e-6, 30e-6), "w_stage2": (10e-6, 80e-6), "r_bias": (50e3, 400e3)},
-        "params": {
-            # net_scale=1e6: SI 公尺 -> 微米 (sky130 範本用 .option scale=1u)
-            "w_diff":   {"label": "W_diff (差動對)",  "unit": "µm", "scale": 1e6, "net_scale": 1e6, "fmt": "{:.2f}"},
-            "w_stage2": {"label": "W_stage2 (第二級)", "unit": "µm", "scale": 1e6, "net_scale": 1e6, "fmt": "{:.2f}"},
-            "r_bias":   {"label": "R_bias (偏壓阻)",   "unit": "kΩ", "scale": 1e-3, "fmt": "{:.2f}"},
-        },
+        "param_keys": _OPAS_KEYS,
+        "placeholders": _OPAS_PH,
+        "ranges": _OPAS_RNG,
+        "params": _OPAS_PARAMS,
         "parser": _parse_opa,
         "dump": "wrdata wave.txt vdb(out) vp(out)",
         "objective": "target",
         "metric": "gain",
         "pm_constraint": True,
+        "optimizer": "multivar",
         "target_label": "目標增益 (dB)",
         "target_unit": "dB",
         "target_scale": 1.0,
         "target_default": 65.0,
-        "start": {"w_diff": 10e-6, "w_stage2": 30e-6, "r_bias": 100e3},
+        "start": _OPAS_START,
         "waveform": "bode",
     },
     "bandgap": {
@@ -292,13 +298,11 @@ CIRCUITS = {
         "label": "Bandgap · sky130 精準",
         "family": "bandgap", "model": "sky130",
         "template": "bandgap_reference_sky130.sp.template",
-        "param_keys": ["r_trim", "n_bjt"],
-        "placeholders": {"r_trim": "{R_trim}", "n_bjt": "{N_bjt}"},
-        "ranges": {"r_trim": (6e3, 14e3), "n_bjt": (2, 24)},
-        "params": {
-            "r_trim": {"label": "R_trim (PTAT 電阻)", "unit": "kΩ", "scale": 1e-3, "fmt": "{:.2f}"},
-            "n_bjt":  {"label": "N_bjt (BJT 面積比)", "unit": "x",  "scale": 1,    "fmt": "{:.1f}"},
-        },
+        "param_keys": _BG_KEYS,
+        "placeholders": _BG_PH,
+        "ranges": _BG_RNG,
+        "params": _BG_PARAMS,
+        "optimizer": "multivar",
         "parser": _parse_bandgap,
         "dump": "wrdata wave.txt v(vref)",
         "objective": "minimize",
@@ -307,7 +311,7 @@ CIRCUITS = {
         "target_unit": "ppm/°C",
         "target_scale": 1.0,
         "target_default": 0.0,
-        "start": {"r_trim": 8e3, "n_bjt": 8},
+        "start": _BG_START,
         "waveform": "temp",
     },
     "ringosc": {

@@ -13,12 +13,19 @@
 
 Vdd vdd 0 3.3
 
-MP1 n1   g vdd vdd PMOS_BG W=50u L=2u
-MP2 n2   g vdd vdd PMOS_BG W=50u L=2u
-MP3 vref g vdd vdd PMOS_BG W=50u L=2u
+* --- PMOS 電流鏡 (per-instance W/L; 3.3V 理想化 Level-1, minimal lib 無 3.3V sky130 元件) ---
+MP1 n1   g vdd vdd PMOS_BG W={W_Pmirror} L={L_Pmirror}
+MP2 n2   g vdd vdd PMOS_BG W={W_Pmirror} L={L_Pmirror}
+MP3 vref g vdd vdd PMOS_BG W={W_Pmirror} L={L_Pmirror}
 
-* 理想運放: 強制 V(n1)=V(n2), 輸出驅動鏡像閘極
-Bop g 0 V = 1.65 - 1e5*(V(n1)-V(n2))
+* --- 真實 5T CMOS OTA (低 Vth NMOS 對 + PMOS 鏡像負載) 取代理想行為級運放 ---
+*     負回授: n1↑ -> Moa2 電流↑ -> g↓ -> 鏡像 Vsg↑ -> 電流↑ -> n2 追上 n1
+Rtail ntail 0 60k
+Moa1 d1 n2 ntail 0   NMOS_OA W=20u L=1u
+Moa2 g  n1 ntail 0   NMOS_OA W=20u L=1u
+Moa3 d1 d1 vdd vdd   PMOS_BG W=10u L=1u
+Moa4 g  d1 vdd vdd   PMOS_BG W=10u L=1u
+Rsu g 0 8MEG                         ; startup: 弱下拉避免零電流簡併態
 
 Q1 0 0 n1 PNP_SKY130 1
 R1 n2 e2 {R_trim}
@@ -27,13 +34,14 @@ R3 vref e3 75k
 Q3 0 0 e3 PNP_SKY130 1
 
 .model PMOS_BG PMOS (LEVEL=1 VTO=-0.7 KP=40u LAMBDA=0.02 PHI=0.7)
+.model NMOS_OA NMOS (LEVEL=1 VTO=0.45 KP=120u LAMBDA=0.04 PHI=0.7)
 * --- 真實 sky130 pnp_05v5 標稱參數 (自 PDK model card 萃取, 去除 MC 變異項) ---
 .model PNP_SKY130 pnp (level=1 tref=30 is=7.119e-18 bf=16.603 nf=1.0 vaf=111.6
 + ikf=0.00038589 ise=1.031e-15 ne=1.64 br=0.2675 var=4.3 ikr=0.0043 nkf=0.426
 + isc=1.9855e-15 nc=1.0 rb=73.32 re=5.3848 rc=100.0 rbm=25.19 irb=0.0002
 + eg=1.125 xtb=1.692 xti=5.0)
 
-.nodeset v(n1)=0.7 v(n2)=0.7 v(g)=1.6 v(vref)=1.25
+.nodeset v(n1)=0.7 v(n2)=0.7 v(g)=2.4 v(vref)=1.25 v(ntail)=0.3 v(d1)=2.4
 
 .dc temp -40 125 1
 
