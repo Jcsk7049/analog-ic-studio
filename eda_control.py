@@ -175,6 +175,14 @@ _OPA_KEYS, _OPA_PH, _OPA_RNG, _OPA_PARAMS, _OPA_START = _merge(
     _scalar("R_zero", "Rz", "{R_zero}", (50.0, 5e3), 1, "{:.0f}ohm", 1e3),
 )
 
+# 快速環形振盪器: 3 級 6 顆反相器 MOS 各自 W/L (Level-1)
+_RING_KEYS, _RING_PH, _RING_RNG, _RING_PARAMS, _RING_START = _merge(*[
+    _wl(suf, dev, (1e-6, 30e-6), (0.18e-6, 1e-6),
+        8e-6 if suf.endswith("p") else 4e-6, 0.3e-6)
+    for suf, dev in [("M0p", "M0_p"), ("M0n", "M0_n"), ("M1p", "M1_p"),
+                     ("M1n", "M1_n"), ("M2p", "M2_p"), ("M2n", "M2_n")]
+])
+
 # Bandgap: PMOS 電流鏡 (L>=0.5u 抑制失配) + PTAT 電阻 + BJT 面積比
 _BG_KEYS, _BG_PH, _BG_RNG, _BG_PARAMS, _BG_START = _merge(
     _wl("Pmirror", "MP1,MP2,MP3", (10e-6, 100e-6), (0.5e-6, 3e-6), 50e-6, 2e-6),
@@ -276,22 +284,20 @@ CIRCUITS = {
         "label": "高頻環形振盪器",
         "family": "ringosc", "model": "fast",
         "template": "ring_oscillator.sp.template",
-        "param_keys": ["w_p", "w_n"],
-        "placeholders": {"w_p": "{W_p}", "w_n": "{W_n}"},
-        "ranges": {"w_p": (1e-6, 30e-6), "w_n": (0.5e-6, 20e-6)},
-        "params": {
-            "w_p": {"label": "W_p (PMOS 寬度)", "unit": "µm", "scale": 1e6, "fmt": "{:.2f}"},
-            "w_n": {"label": "W_n (NMOS 寬度)", "unit": "µm", "scale": 1e6, "fmt": "{:.2f}"},
-        },
+        "param_keys": _RING_KEYS,
+        "placeholders": _RING_PH,
+        "ranges": _RING_RNG,
+        "params": _RING_PARAMS,
         "parser": _parse_ringosc,
-        "dump": "wrdata wave.txt v(n1)",
+        "dump": "wrdata wave.txt v(Vout)",
         "objective": "target",
         "metric": "freq",
+        "optimizer": "multivar",
         "target_label": "目標頻率 (GHz)",
         "target_unit": "GHz",
         "target_scale": 1e9,              # GHz -> Hz
         "target_default": 2.4,
-        "start": {"w_p": 4e-6, "w_n": 2e-6},
+        "start": _RING_START,
         "waveform": "wave",
     },
     "ringosc_sky130": {
