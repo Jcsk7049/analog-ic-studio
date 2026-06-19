@@ -201,6 +201,15 @@ _BG_KEYS, _BG_PH, _BG_RNG, _BG_PARAMS, _BG_START = _merge(
     _scalar("N_bjt", "Q2", "{N_bjt}", (2.0, 24.0), 1, "{:.0f}x", 8.0),
 )
 
+# LC-VCO: 交叉耦合對 + 尾電流 (各自 W/L) + 電感 + 固定/變容電容
+_LC_KEYS, _LC_PH, _LC_RNG, _LC_PARAMS, _LC_START = _merge(
+    _wl("sw",   "M1,M2 交叉耦合", (10e-6, 120e-6), (0.18e-6, 1e-6), 40e-6, 0.18e-6),
+    _wl("tail", "Mtail 尾電流",   (20e-6, 200e-6), (0.3e-6, 2e-6),  80e-6, 0.5e-6),
+    _scalar("L_ind", "L 電感",    "{L_ind}", (0.5e-9, 5e-9),   1e9,  "{:.2f}nH", 2e-9),
+    _scalar("C_fix", "C_fix 固定", "{C_fix}", (0.1e-12, 1e-12), 1e12, "{:.2f}pF", 0.4e-12),
+    _scalar("C_var", "C_var 變容", "{C_var}", (0.2e-12, 1.5e-12), 1e12, "{:.2f}pF", 0.8e-12),
+)
+
 
 CIRCUITS = {
     "opa": {
@@ -330,6 +339,28 @@ CIRCUITS = {
         "target_scale": 1e9,
         "target_default": 3.0,
         "start": _VCO_START,
+        "waveform": "wave",
+    },
+    "lcvco": {
+        "label": "LC 壓控振盪器",
+        "family": "lcvco", "model": "fast",
+        "template": "lc_vco.sp.template",
+        "param_keys": _LC_KEYS,
+        "placeholders": _LC_PH,
+        "ranges": _LC_RNG,
+        "params": _LC_PARAMS,
+        "parser": _parse_ringosc,
+        "dump": "wrdata wave.txt v(outp)",
+        "objective": "target",
+        "metric": "freq",
+        "optimizer": "multivar",
+        "tank_q": 8.0,                     # LC tank 高 Q -> 相位雜訊遠優於環形
+        "vdd": 1.8,
+        "target_label": "目標頻率 (GHz)",
+        "target_unit": "GHz",
+        "target_scale": 1e9,
+        "target_default": 3.4,
+        "start": _LC_START,
         "waveform": "wave",
     },
 }

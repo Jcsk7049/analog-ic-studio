@@ -128,7 +128,7 @@ def pareto_packages(circuit, target=None, pop=120000, seed=0):
     if circuit.startswith("opa"):
         cset |= set(_topk(np.array([m.get("ugf", 0) for m in mets_list]), K, True))
         cset |= set(_topk(np.array([min(m["pm"], 85) for m in mets_list]), K, True))
-    elif circuit.startswith("ringosc"):
+    elif metric == "freq":                                # 任何振盪器 (環形 / LC-VCO)
         cset |= set(_topk(area, K, False)) | set(_topk(powr, K, False))
         cset |= set(_topk(np.abs(np.array([m["freq"] for m in mets_list]) - tgt), K, False))
     else:
@@ -172,7 +172,7 @@ def pareto_packages(circuit, target=None, pop=120000, seed=0):
         A = pick(lambda r: r["m"].get("ugf", 0), True)            # 高效能: 最大頻寬 (PM 自然較低)
         B = pick(lambda r: r["m"].get("pm", 0), True)             # 極致穩定: 最大 PM (>60)
         C = pick(cost)                                            # 低功耗平衡
-    elif circuit.startswith("ringosc"):
+    elif metric == "freq":                                       # 任何振盪器 (環形 / LC-VCO)
         A = pick(lambda r: r["m"]["freq"], True)                 # 高效能: 最快頻率
         B = pick(lambda r: abs(r["m"]["freq"] - tgt))            # 穩定: 最貼目標頻率
         C = pick(lambda r: r["power"])                           # 低功耗平衡: 最低動態功耗

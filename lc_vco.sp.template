@@ -1,0 +1,45 @@
+* ============================================================
+*  LC-VCO (交叉耦合 NMOS 負 gm + LC tank + 變容二極體調諧)
+*  業界/論文主流高 Q 低相位雜訊振盪器。每顆 MOS 獨立 W/L:
+*    交叉耦合對 M1/M2 (W_sw/L_sw) · 尾電流源 Mtail (W_tail/L_tail)
+*  tank: 電感 L_ind (串聯 Rs 設 Q) + 固定電容 C_fix + 變容二極體 (Vctrl 調諧)
+*  Vctrl 高 -> 變容反偏大 -> Cj 小 -> 諧振頻率高
+* ============================================================
+.title LC-VCO cross-coupled
+Vdd vdd 0 1.8
+Vctrl ctrl 0 1.8
+Vnb  nb 0 0.9
+
+* --- 尾電流源 ---
+Mtail ntail nb 0 0 NMOS_LC W={W_tail} L={L_tail}
+
+* --- 交叉耦合負 gm 對 ---
+M1 outp outn ntail 0 NMOS_LC W={W_sw} L={L_sw}
+M2 outn outp ntail 0 NMOS_LC W={W_sw} L={L_sw}
+
+* --- LC tank (兩臂電感至 vdd, 串聯電阻設 Q) ---
+L1 vdd a1 {L_ind}
+Rs1 a1 outp 3
+L2 vdd a2 {L_ind}
+Rs2 a2 outn 3
+
+* --- 固定電容 + 變容二極體 (反偏調諧) ---
+C1 outp 0 {C_fix}
+C2 outn 0 {C_fix}
+Dv1 ctrl outp VAR
+Dv2 ctrl outn VAR
+
+.model NMOS_LC NMOS (LEVEL=1 VTO=0.4 KP=200u LAMBDA=0.1 PHI=0.7 TOX=8n CGSO=3e-10 CGDO=3e-10)
+.model VAR D (CJO={C_var} VJ=0.7 M=0.5 IS=1e-15)
+
+.ic v(outp)=1.8 v(outn)=0.2
+
+.control
+  tran 1p 30n uic
+  meas tran t1 when v(outp)=v(outn) td=15n rise=1
+  meas tran t2 when v(outp)=v(outn) td=15n rise=6
+  let freq = 5 / (t2 - t1)
+  print freq
+  {DUMP}
+.endc
+.end
