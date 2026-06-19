@@ -100,7 +100,11 @@ def _parse_bandgap(log):
 def _parse_ringosc(log):
     freq = _grab(r"^freq\s*=\s*([-\d.eE+]+)", log)
     ok = freq is not None and freq > 0 and not _bad(log)
-    return {"freq": freq, "converged": ok, "ok": ok}
+    r = {"freq": freq, "converged": ok, "ok": ok}
+    iavg = _grab(r"^iavg\s*=\s*([-\d.eE+]+)", log)        # 相位雜訊用: 電源平均電流
+    if iavg is not None:
+        r["iavg"] = iavg
+    return r
 
 
 # ----------------------------------------------------------------------
@@ -518,6 +522,34 @@ def opa_metrics(circuit, params):
             "slew_v_us": sr / 1e6, "swing_lo": sw_lo, "swing_hi": sw_hi,
             "swing_vpp": sw_hi - sw_lo, "icmr_lo": icmr_lo, "icmr_hi": icmr_hi,
             "icmr_vpp": icmr_hi - icmr_lo, "psrr_db": psrr, "vdd": VDD}
+
+
+def vco_phase_noise(circuit, params, Q=1.0, F=4.0, vdd=1.8):
+    """VCO 相位雜訊 (Leeson 解析估算 — ngspice 無振盪器 pnoise 引擎)。
+       由模擬萃取 f0 與電源平均電流 -> Psig=Vdd·|Iavg|, 套 Leeson:
+         L(Δf)=10log[ 2FkT/Psig · (1+(f0/2QΔf)²)(1+fc/Δf) ]  (環形 Q≈1; LC 傳高 Q)
+       回傳 PN 曲線 / L@1MHz / FoM。標示『估算』, 非直接模擬。"""
+    import math, uuid
+    KT = 1.380649e-23 * 300.0
+    FC = 1e6                                              # flicker (1/f) 轉角頻率假設
+    r = run_isolated(circuit, params, tag=f"pn_{uuid.uuid4().hex[:8]}",
+                     replaces=[("print freq",
+                                "meas tran iavg avg i(vdd) from=8n to=18n\n  print freq")])
+    f0 = r.get("freq")
+    iavg = r.get("iavg")
+    if not r.get("ok") or not f0 or iavg is None:
+        return {"error": "VCO 未起振或無法取得電源電流"}
+    psig = vdd * abs(iavg)                                # 振盪器消耗功率 (W)
+    def leeson(df):
+        return 10 * math.log10((2 * F * KT / psig)
+                               * (1 + (f0 / (2 * Q * df)) ** 2) * (1 + FC / df))
+    offs = [10 ** (3 + 0.25 * i) for i in range(int((8 - 3) / 0.25) + 1)]   # 1kHz~100MHz
+    curve = [(o, leeson(o)) for o in offs]
+    pn1m = leeson(1e6)
+    fom = pn1m - 20 * math.log10(f0 / 1e6) + 10 * math.log10(psig / 1e-3)
+    return {"circuit": circuit, "f0": f0, "psig_mw": psig * 1e3, "Q": Q, "F": F,
+            "curve": curve, "pn_100k": leeson(1e5), "pn_1m": pn1m, "pn_10m": leeson(1e7),
+            "fom": fom, "method": "Leeson 解析估算 (ngspice 無 oscillator pnoise)"}
 
 
 def run_waveform(circuit, params):

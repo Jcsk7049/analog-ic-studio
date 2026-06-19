@@ -174,6 +174,7 @@ def _circuits_meta():
         meta[k] = {
             "label": c["label"], "objective": c["objective"],
             "family": c.get("family", k), "model": c.get("model", "fast"),
+            "is_vco": ("vco" in c["template"] or "lc" in c["template"]),
             "target_label": c["target_label"], "target_unit": c["target_unit"],
             "target_default": c["target_default"],
             "param_keys": c["param_keys"],
@@ -372,6 +373,46 @@ def make_ftr_png(tun):
     ax.set_title(f"Kvco~{tun['kvco_mhz_v']:.0f} MHz/V   FTR~{tun['ftr_pct']:.1f}%",
                  color="#1d1d1f", fontsize=11)
     return _b64(fig)
+
+
+def make_pn_png(pn):
+    """相位雜訊 L(Δf) 曲線 (log 頻偏軸, 英文標籤)。"""
+    cur = pn.get("curve") or []
+    if len(cur) < 2:
+        return None
+    _fig()
+    xs = [o for o, _ in cur]; ys = [L for _, L in cur]
+    fig, ax = plt.subplots(figsize=(6.6, 3.8)); _style(ax)
+    ax.set_xscale("log")
+    ax.plot(xs, ys, color=_PURPLE, lw=2.2)
+    for off, lab in ((1e6, "1MHz"),):
+        ax.axvline(off, color=_RED, lw=1, ls="--")
+    ax.set_xlabel("Offset Frequency (Hz)"); ax.set_ylabel("L(df) (dBc/Hz)")
+    ax.set_title(f"Phase Noise (Leeson est.)   FoM~{pn['fom']:.0f} dBc/Hz",
+                 color="#1d1d1f", fontsize=11)
+    return _b64(fig)
+
+
+@app.route("/api/phase_noise", methods=["POST"])
+def api_phase_noise():
+    """VCO 相位雜訊 Leeson 估算 (僅 VCO/LC-VCO)。"""
+    data = request.get_json(force=True)
+    circuit = data.get("circuit", "ringosc_sky130")
+    c = CIRCUITS[circuit]
+    if "vco" not in c["template"] and "lc" not in c["template"]:
+        return jsonify({"error": "相位雜訊分析僅支援 VCO / LC-VCO"}), 200
+    params = data.get("params")
+    if params:
+        params = {k: float(params[k]) for k in c["param_keys"]}
+    else:
+        params = c["start"]
+    # LC-VCO tank Q 高 -> 雜訊大幅優於環形; 由電路 metadata 取 Q (預設環形 Q=1)
+    Q = c.get("tank_q", 1.0)
+    r = eda.vco_phase_noise(circuit, params, Q=Q, vdd=c.get("vdd", 1.8))
+    if "error" in r:
+        return jsonify(r), 200
+    r["pn_png"] = make_pn_png(r)
+    return jsonify(r)
 
 
 @app.route("/api/tuning", methods=["POST"])

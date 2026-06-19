@@ -279,6 +279,17 @@
     </div>
   </div>
 
+  <div class="card" style="margin-top:18px;" data-a id="pnCard">
+    <div class="sect">VCO 相位雜訊（RFIC 核心 · Leeson 解析估算）</div>
+    <button class="btn-ghost" id="pnBtn" onclick="runPhaseNoise()">估算相位雜訊 L(Δf) / FoM</button>
+    <span class="mnote" id="pnNote"></span>
+    <div id="pnBox" class="hidden" style="margin-top:14px;">
+      <div class="grid metrics" id="pnMetrics" style="margin-bottom:14px;"></div>
+      <img id="pnImg" style="width:100%;border-radius:14px;border:1px solid var(--line);">
+      <div class="mnote" style="margin-top:6px;">註：ngspice 無振盪器 pnoise 引擎，本曲線為 Leeson 解析估算（由模擬 f₀ + 電源功耗推算），非直接模擬。</div>
+    </div>
+  </div>
+
   <div class="card" style="margin-top:18px;" data-a>
     <div class="sect">製程 Corner 變異與蒙地卡羅良率分析</div>
     <button class="btn-ghost" id="yieldBtn" onclick="runYield()">執行良率評估（±10% 高斯 × 50 次）</button>
@@ -356,6 +367,7 @@ function apply(){
     if(cached.pvt) renderPvt(cached.pvt);           // 還原 PVT 圖
     if(cached.ftr) renderTuning(cached.ftr);        // 還原 VCO 調諧曲線
     if(cached.opaMet) renderOpaMetrics(cached.opaMet); // 還原 OPA 進階指標
+    if(cached.pn) renderPhaseNoise(cached.pn);         // 還原相位雜訊
   }else{
     document.getElementById('results').classList.add('hidden');
   }
@@ -373,8 +385,9 @@ function setupSweep(){
   // PVT 卡: 僅 sky130 OPA / VCO 支援 (有 ff/ss 真實角落)
   const pvtOk=(circuit==='opa_sky130'||circuit==='ringosc_sky130');
   document.getElementById('pvtCard').classList.toggle('hidden',!pvtOk);
-  // FTR 調諧卡: 僅 VCO (sky130 精準環形) 支援 (Vctrl 可掃)
-  document.getElementById('ftrCard').classList.toggle('hidden',circuit!=='ringosc_sky130');
+  // FTR 調諧卡 / 相位雜訊卡: 任何 VCO (含未來 LC-VCO, Vctrl 可掃)
+  document.getElementById('ftrCard').classList.toggle('hidden',!CIRCUITS[circuit].is_vco);
+  document.getElementById('pnCard').classList.toggle('hidden',!CIRCUITS[circuit].is_vco);
   // OPA 進階指標卡: 僅 fast OPA (op-point 查詢名稱相符)
   document.getElementById('opaMetCard').classList.toggle('hidden',circuit!=='opa');
   document.getElementById('pvtBox').classList.add('hidden');
@@ -692,6 +705,34 @@ function renderOpaMetrics(d){
   ];
   document.getElementById('opaMetMetrics').innerHTML=cards.map(c=>
     `<div class="metric"><div class="k">${c[0]}</div><div class="v ${c[2]}">${c[1]}</div></div>`).join('');
+}
+
+// ---- VCO 相位雜訊 (Leeson 估算) ----
+async function runPhaseNoise(){
+  const btn=document.getElementById('pnBtn'), txt=btn.textContent;
+  btn.disabled=true; btn.innerHTML='<span class="spinner" style="border-color:rgba(0,113,227,.3);border-top-color:transparent;"></span>估算中…';
+  try{
+    const body={circuit, params:(lastData?lastData.final.params:undefined)};
+    const r=await fetch('/api/phase_noise',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(d.error){alert(d.error);return;}
+    cache[circuit]=cache[circuit]||{}; cache[circuit].pn=d;
+    renderPhaseNoise(d);
+  }catch(e){alert('失敗: '+e);}
+  finally{btn.disabled=false; btn.textContent=txt;}
+}
+function renderPhaseNoise(d){
+  document.getElementById('pnBox').classList.remove('hidden');
+  document.getElementById('pnNote').textContent=`f₀=${(d.f0/1e9).toFixed(2)}GHz · Psig=${d.psig_mw.toFixed(2)}mW · Q=${d.Q}`;
+  const cards=[
+    ['L @100kHz',d.pn_100k.toFixed(1)+' dBc/Hz','purple'],
+    ['L @1MHz',d.pn_1m.toFixed(1)+' dBc/Hz','blue'],
+    ['L @10MHz',d.pn_10m.toFixed(1)+' dBc/Hz','teal'],
+    ['FoM',d.fom.toFixed(1)+' dBc/Hz', (d.fom<-180?'green':'orange')],
+  ];
+  document.getElementById('pnMetrics').innerHTML=cards.map(c=>
+    `<div class="metric"><div class="k">${c[0]}</div><div class="v ${c[2]}">${c[1]}</div></div>`).join('');
+  document.getElementById('pnImg').src='data:image/png;base64,'+d.pn_png;
 }
 
 // ---- VCO 調諧特性 (FTR / Kvco) ----
