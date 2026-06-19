@@ -38,7 +38,7 @@ R1 n2 e2 {R_trim}
 Q2 0 0 e2 PNP_BG {N_bjt}
 
 * --- 輸出支路: Vref = I*R3 + Vbe3 (PTAT + CTAT) ---
-R3 vref e3 80k
+R3 vref e3 {R_out}
 Q3 0 0 e3 PNP_BG 1
 
 * --- 元件模型 ---

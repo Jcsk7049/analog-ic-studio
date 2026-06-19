@@ -19,9 +19,9 @@ M2 outn outp ntail 0 NMOS_LC W={W_sw} L={L_sw}
 
 * --- LC tank (兩臂電感至 vdd, 串聯電阻設 Q) ---
 L1 vdd a1 {L_ind}
-Rs1 a1 outp 3
+Rs1 a1 outp {R_tank}
 L2 vdd a2 {L_ind}
-Rs2 a2 outn 3
+Rs2 a2 outn {R_tank}
 
 * --- 固定電容 + 變容二極體 (反偏調諧) ---
 C1 outp 0 {C_fix}

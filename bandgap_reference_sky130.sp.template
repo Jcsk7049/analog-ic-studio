@@ -30,7 +30,7 @@ Rsu g 0 8MEG                         ; startup: 弱下拉避免零電流簡併�
 Q1 0 0 n1 PNP_SKY130 1
 R1 n2 e2 {R_trim}
 Q2 0 0 e2 PNP_SKY130 {N_bjt}
-R3 vref e3 75k
+R3 vref e3 {R_out}
 Q3 0 0 e3 PNP_SKY130 1
 
 .model PMOS_BG PMOS (LEVEL=1 VTO=-0.7 KP=40u LAMBDA=0.02 PHI=0.7)

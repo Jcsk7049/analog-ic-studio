@@ -187,6 +187,7 @@ _OPA_KEYS, _OPA_PH, _OPA_RNG, _OPA_PARAMS, _OPA_START = _merge(
     _wl("M6", "M6",       (2e-6, 120e-6), (0.35e-6, 2e-6), 40e-6, 1e-6),
     _scalar("C_miller", "Cc", "{C_miller}", (0.5e-12, 6e-12), 1e12, "{:.2f}pF", 2e-12),
     _scalar("R_zero", "Rz", "{R_zero}", (50.0, 5e3), 1, "{:.0f}ohm", 1e3),
+    _scalar("R_bias", "Rbias", "{R_bias}", (40e3, 400e3), 1e-3, "{:.0f}kohm", 120e3),
 )
 
 # sky130 精準 OPA: 同 fast 分組但 ns=1e6 (微米), L 下限 0.15µm 製程極限
@@ -197,6 +198,7 @@ _OPAS_KEYS, _OPAS_PH, _OPAS_RNG, _OPAS_PARAMS, _OPAS_START = _merge(
     _wl("M6", "XM6",        (4e-6, 100e-6), (0.18e-6, 1.5e-6), 30e-6, 0.5e-6, ns=1e6),
     _scalar("C_miller", "Cc", "{C_miller}", (0.3e-12, 5e-12), 1e12, "{:.2f}pF", 1e-12),
     _scalar("R_zero", "Rz", "{R_zero}", (50.0, 5e3), 1, "{:.0f}ohm", 1e3),
+    _scalar("R_bias", "Rbias", "{R_bias}", (50e3, 500e3), 1e-3, "{:.0f}kohm", 150e3),
 )
 
 # 快速環形振盪器: 3 級 6 顆反相器 MOS 各自 W/L (Level-1)
@@ -211,6 +213,7 @@ _RING_KEYS, _RING_PH, _RING_RNG, _RING_PARAMS, _RING_START = _merge(*[
 _BG_KEYS, _BG_PH, _BG_RNG, _BG_PARAMS, _BG_START = _merge(
     _wl("Pmirror", "MP1,MP2,MP3", (10e-6, 100e-6), (0.5e-6, 3e-6), 50e-6, 2e-6),
     _scalar("R_trim", "R1", "{R_trim}", (4e3, 20e3), 1e-3, "{:.2f}kohm", 9e3),
+    _scalar("R_out", "R3", "{R_out}", (40e3, 120e3), 1e-3, "{:.0f}kohm", 80e3),
     _scalar("N_bjt", "Q2", "{N_bjt}", (2.0, 24.0), 1, "{:.0f}x", 8.0),
 )
 
@@ -221,6 +224,7 @@ _LC_KEYS, _LC_PH, _LC_RNG, _LC_PARAMS, _LC_START = _merge(
     _scalar("L_ind", "L 電感",    "{L_ind}", (0.5e-9, 5e-9),   1e9,  "{:.2f}nH", 2e-9),
     _scalar("C_fix", "C_fix 固定", "{C_fix}", (0.1e-12, 1e-12), 1e12, "{:.2f}pF", 0.4e-12),
     _scalar("C_var", "C_var 變容", "{C_var}", (0.2e-12, 1.5e-12), 1e12, "{:.2f}pF", 0.8e-12),
+    _scalar("R_tank", "Rs 串聯阻", "{R_tank}", (1.0, 20.0), 1, "{:.1f}ohm", 3.0),
 )
 
 # LC-VCO sky130: 交叉耦合/尾電流/變容皆 sky130 BSIM4 (ns=1e6), 電感理想
@@ -230,6 +234,7 @@ _LCS_KEYS, _LCS_PH, _LCS_RNG, _LCS_PARAMS, _LCS_START = _merge(
     _wl("var",  "XMv 變容",         (5e-6, 60e-6),   (0.3e-6, 2e-6),  20e-6, 0.5e-6, ns=1e6),
     _scalar("L_ind", "L 電感",  "{L_ind}", (0.5e-9, 5e-9),   1e9,  "{:.2f}nH", 2e-9),
     _scalar("C_fix", "C_fix 固定", "{C_fix}", (0.05e-12, 0.8e-12), 1e12, "{:.2f}pF", 0.2e-12),
+    _scalar("R_tank", "Rs 串聯阻", "{R_tank}", (1.0, 20.0), 1, "{:.1f}ohm", 5.0),
 )
 
 

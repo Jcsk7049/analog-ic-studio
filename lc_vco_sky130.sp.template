@@ -23,9 +23,9 @@ XM2 outn outp ntail 0 sky130_fd_pr__nfet_01v8 L={L_sw} W={W_sw}
 
 * --- LC tank: 理想電感 + 串聯電阻設 Q ---
 L1 vdd a1 {L_ind}
-Rs1 a1 outp 5
+Rs1 a1 outp {R_tank}
 L2 vdd a2 {L_ind}
-Rs2 a2 outn 5
+Rs2 a2 outn {R_tank}
 C1 outp 0 {C_fix}
 C2 outn 0 {C_fix}
 

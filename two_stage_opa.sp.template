@@ -18,7 +18,7 @@ M7  out  nbias vss  vss  NMOS_GEN  W={W_M5} L={L_M5}
 M8  nbias nbias vss vss  NMOS_GEN  W={W_M5} L={L_M5}
 * --- 第二級共源放大管 M6 ---
 M6  out  d2    vdd  vdd  PMOS_GEN  W={W_M6} L={L_M6}
-Rbias vdd  nbias  120k
+Rbias vdd  nbias  {R_bias}
 * --- 米勒補償 Cc + 零點電阻 Rz (out -> nz -> d2) ---
 Cc   out  nz   {C_miller}
 Rz   nz   d2   {R_zero}

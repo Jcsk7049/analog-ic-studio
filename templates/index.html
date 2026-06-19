@@ -295,6 +295,7 @@
     <button class="btn-ghost" id="yieldBtn" onclick="runYield()">執行良率評估（Pelgrom 失配＋全域製程 × 50 次）</button>
     <button class="btn-ghost" id="yieldDnnBtn" onclick="runYieldDNN()" style="margin-left:8px;">AI 萬點高速預測（深度學習 × 10000）</button>
     <span class="mnote" id="yieldMethod" style="margin-left:12px;"></span>
+    <div class="mnote" style="margin-top:6px;">註：AI 萬點預測需該電路有預訓練的 PyTorch 替代模型；尚未訓練者（多數電路）請用左側 50 點 ngspice 評估（真實模擬，較慢但無需模型）。</div>
     <div id="yieldBox" class="hidden" style="margin-top:18px;">
       <div class="grid metrics" id="yieldMetrics"></div>
       <div class="two" style="margin-top:16px;">

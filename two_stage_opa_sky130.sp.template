@@ -37,7 +37,7 @@ XM8  nbias nbias vss vss  sky130_fd_pr__nfet_01v8  L={L_M5} W={W_M5}
 XM6  out  d2    vdd  vdd  sky130_fd_pr__pfet_01v8  L={L_M6} W={W_M6}
 
 * --- 偏壓支路 (固定電阻設偏流) ---
-Rbias vdd  nbias  150k
+Rbias vdd  nbias  {R_bias}
 
 * --- 米勒補償 Cc + 零點電阻 Rz (out -> nz -> d2) ---
 Cc   out  nz   {C_miller}
