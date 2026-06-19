@@ -10,6 +10,7 @@ web_app.py — 通用類比 IC 自動調參平台 視覺化網頁 (Flask)
 
 import io
 import os
+import math
 import base64
 import json
 import numpy as np
@@ -184,6 +185,33 @@ def _circuits_meta():
     return meta
 
 
+FINGER_MAX_UM = 10.0          # 單一 finger 寬度上限 (多晶矽本徵電阻; 超過須拆並聯)
+
+
+def _wl_table(c, params):
+    """實體化電路 -> 每顆元件 W/L 雙欄表; 真實 MOS (同時有 W 與 L) 加佈局 finger 拆分
+       NF=ceil(W/10µm), 顯示每指寬度 (單 finger ≤10µm 之佈局實務)。"""
+    devs, wnum = {}, {}
+    for k in c["param_keys"]:
+        pv = c["params"][k]
+        if "device" not in pv:
+            continue
+        devs.setdefault(pv["device"], {})[pv["dim"]] = pv["fmt"].format(params[k] * pv["scale"])
+        if pv["dim"] == "W" and pv.get("unit") == "µm":
+            wnum[pv["device"]] = params[k] * pv["scale"]            # 寬度 (µm)
+    order = list(dict.fromkeys(c["params"][k]["device"] for k in c["param_keys"]
+                               if "device" in c["params"][k]))
+    rows = []
+    for d in order:
+        row = {"device": d, "W": devs[d].get("W", "—"), "L": devs[d].get("L", "—")}
+        if "W" in devs[d] and "L" in devs[d] and d in wnum:        # 真正 MOS 才拆 finger
+            nf = max(1, math.ceil(wnum[d] / FINGER_MAX_UM))
+            row["fingers"] = nf
+            row["w_finger"] = f"{wnum[d] / nf:.2f}"
+        rows.append(row)
+    return rows
+
+
 @app.route("/")
 def index():
     return render_template("index.html", circuits_json=json.dumps(_circuits_meta(), ensure_ascii=False))
@@ -210,16 +238,9 @@ def api_optimize():
     wave = eda.run_waveform(circuit, fin["params"])
     result["chart_png"] = make_chart(circuit, wave, fin["metrics"])
 
-    # KiCad 參數對照: VCO (params 含 device/dim) -> 每顆 MOS 的 W/L 雙欄表; 其餘 -> ref/role 列
+    # KiCad 參數對照: 實體化電路 (params 含 device/dim) -> 每顆 MOS 的 W/L+finger 表; 其餘 -> ref/role
     if any("device" in v for v in c["params"].values()):
-        devs = {}
-        for k in c["param_keys"]:
-            pv = c["params"][k]
-            v = pv["fmt"].format(fin["params"][k] * pv["scale"])
-            devs.setdefault(pv["device"], {})[pv["dim"]] = v
-        order = list(dict.fromkeys(c["params"][k]["device"] for k in c["param_keys"]))
-        result["wl_table"] = [{"device": d, "W": devs[d].get("W", "—"),
-                               "L": devs[d].get("L", "—")} for d in order]
+        result["wl_table"] = _wl_table(c, fin["params"])
     else:
         rows = []
         for k in c["param_keys"]:
@@ -301,14 +322,8 @@ def api_pareto():
     has_dev = any("device" in v for v in c["params"].values())
     for pk in r["packages"]:
         p = pk["params"]
-        if has_dev:                                     # 實體化電路 -> 每顆 MOS W/L 雙欄
-            devs = {}
-            for k in c["param_keys"]:
-                pv = c["params"][k]
-                devs.setdefault(pv["device"], {})[pv["dim"]] = pv["fmt"].format(p[k] * pv["scale"])
-            order = list(dict.fromkeys(c["params"][k]["device"] for k in c["param_keys"]))
-            pk["wl_table"] = [{"device": d, "W": devs[d].get("W", "—"),
-                               "L": devs[d].get("L", "—")} for d in order]
+        if has_dev:                                     # 實體化電路 -> 每顆 MOS W/L+finger 表
+            pk["wl_table"] = _wl_table(c, p)
         else:
             pk["kicad"] = [{"ref": KICAD_MAP[circuit][k][0], "role": KICAD_MAP[circuit][k][1],
                             "value": f"{c['params'][k]['fmt'].format(p[k]*c['params'][k]['scale'])}{c['params'][k]['unit']}"}

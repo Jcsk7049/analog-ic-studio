@@ -423,12 +423,13 @@ function fmtParam(key,siVal){const pm=lastData.params_meta[key];return (siVal*pm
 const SPEC_NAME={gain:'Gain',pm:'PM',tc:'TC',vref:'Vref',freq:'Freq'};
 function renderKicad(d){
   const head=document.getElementById('kicadHead'), body=document.getElementById('kicadBody');
-  if(d && d.wl_table){            // VCO: 每顆 MOS 的 W/L 雙欄
-    head.innerHTML='<tr><th>電晶體</th><th>寬度 W (µm)</th><th>長度 L (µm)</th></tr>';
+  if(d && d.wl_table){            // 實體化: 每顆元件 W/L 雙欄 + 佈局 finger
+    head.innerHTML='<tr><th>元件</th><th>寬度 W (µm)</th><th>長度 L (µm)</th><th>佈局 (Fingers ≤10µm)</th></tr>';
     body.innerHTML=d.wl_table.map(r=>
       `<tr><td><b>${r.device}</b></td>
        <td>${r.W}<span class="copy" onclick="cp('${r.W}')">複製</span></td>
-       <td>${r.L}<span class="copy" onclick="cp('${r.L}')">複製</span></td></tr>`).join('');
+       <td>${r.L}<span class="copy" onclick="cp('${r.L}')">複製</span></td>
+       <td>${r.fingers?`${r.fingers} × ${r.w_finger}µm`:'—'}</td></tr>`).join('');
   }else{                          // 一般: 元件/角色/數值
     const rows=(d && d.kicad)||[];
     head.innerHTML='<tr><th>元件</th><th>角色</th><th>數值</th></tr>';
