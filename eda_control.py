@@ -77,6 +77,8 @@ def _parse_opa(log):
     gain = _grab(r"^gain\s*=\s*([-\d.eE+]+)", log)
     ugf = _grab(r"^ugf\s*=\s*([-\d.eE+]+)", log)
     pm = _grab(r"^pm\s*=\s*([-\d.eE+]+)", log)
+    if pm is not None:                                   # 相位 unwrap: 正規化到 (-180,180]
+        pm = ((pm + 180) % 360) - 180                    # 351°(wrap 假值) -> -9°(真實: 不穩定)
     r = {"gain": gain, "ugf": ugf, "pm": pm,
          "converged": (not _bad(log)) and gain is not None,
          "ok": gain is not None and not _bad(log)}

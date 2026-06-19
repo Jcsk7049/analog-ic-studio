@@ -163,10 +163,12 @@ def _mv_loss(circuit, r, tgt):
             return PENALTY
         L = ((v - tgt) / (abs(tgt) + 1e-12)) ** 2
         if c.get("pm_constraint"):
-            pm = r.get("pm")
-            if pm is None or not (0 < pm < 90):       # 非物理 (相位 wrap) -> 重罰避開
+            pm = r.get("pm")                          # 已於 _parse_opa unwrap 至 (-180,180]
+            if pm is None:
                 L += 10.0
-            elif pm < 45:
+            elif pm < 0:                              # 負裕度 = 不穩定
+                L += 10.0
+            elif pm < 45:                             # 裕度不足
                 L += 4.0 * ((45 - pm) / 45) ** 2
         return L
     tc = r.get("tc")                                  # minimize
