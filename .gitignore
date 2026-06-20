@@ -1,6 +1,6 @@
 # 大型第三方工具 (請依 README 自行下載)
 tools/
-pdk/sky130_fd_pr/
+# pdk/sky130_fd_pr/ 已納版控供雲端部署 (HF Spaces Docker) — 12MB minimal 子集
 
 # 生成的 AI 模型 / 資料集 (可重新訓練)
 data/*.pth

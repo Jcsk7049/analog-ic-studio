@@ -1,0 +1,14 @@
+.git
+tools/
+__pycache__/
+*.pyc
+data/*.pth
+data/*.npz
+data/*.log
+data/server.log
+data/tunnel.log
+run.sp
+wave.txt
+run.log
+sweep_*.sp
+wave_*.txt

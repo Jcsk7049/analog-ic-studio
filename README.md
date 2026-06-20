@@ -1,3 +1,13 @@
+---
+title: Analog IC Studio
+emoji: 🔬
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Analog IC Studio — 類比 IC 自動調參與論文實驗加速平台
 
 以 **Python + Ngspice + PyTorch** 打造的類比積體電路自動化設計平台：輸入規格目標，

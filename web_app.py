@@ -493,4 +493,6 @@ if __name__ == "__main__":
     print("  通用類比 IC 自動調參平台 — 視覺化網頁")
     print("  http://127.0.0.1:5000")
     print("=" * 56)
-    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)
+    port = int(os.environ.get("PORT", 5000))     # HF Spaces 用 7860; 本機預設 5000
+    host = "0.0.0.0" if os.environ.get("PORT") else "127.0.0.1"
+    app.run(host=host, port=port, debug=False, threaded=True)
