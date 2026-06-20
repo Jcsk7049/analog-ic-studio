@@ -462,6 +462,16 @@ def api_opa_metrics():
     return jsonify(eda.opa_metrics(circuit, params))
 
 
+@app.route("/api/progress")
+def api_progress():
+    """優化進度 (前端進度條輪詢): evals/total -> 百分比。"""
+    import optimizer
+    p = optimizer.PROGRESS
+    pct = min(99, int(100 * p["evals"] / max(p["total"], 1))) if p["running"] else 100
+    return jsonify({"running": p["running"], "evals": p["evals"],
+                    "total": p["total"], "pct": pct, "circuit": p["circuit"]})
+
+
 @app.route("/api/netlist")
 def api_netlist():
     circuit = request.args.get("circuit", "opa")
@@ -483,4 +493,4 @@ if __name__ == "__main__":
     print("  通用類比 IC 自動調參平台 — 視覺化網頁")
     print("  http://127.0.0.1:5000")
     print("=" * 56)
-    app.run(host="127.0.0.1", port=5000, debug=False)
+    app.run(host="127.0.0.1", port=5000, debug=False, threaded=True)

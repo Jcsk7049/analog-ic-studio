@@ -176,6 +176,12 @@
     </div>
     <button class="btn" id="runBtn" onclick="run()">開始優化</button>
   </div>
+  <div id="progWrap" class="hidden" style="margin-top:14px;">
+    <div style="height:8px;border-radius:6px;background:var(--line);overflow:hidden;">
+      <div id="progBar" style="height:100%;width:0%;background:linear-gradient(90deg,#0071e3,#34c759);transition:width .4s;"></div>
+    </div>
+    <div class="mnote" id="progText" style="margin-top:6px;"></div>
+  </div>
   <div class="hint" id="hint"></div>
 </div>
 
@@ -409,13 +415,36 @@ async function run(){
     body.target=t;
   }
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span>優化中…';
+  const t0=Date.now();
+  startProgress(t0);
   try{
     const r=await fetch('/api/optimize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
     if(d.error){alert(d.error);return;}
     render(d);
   }catch(e){alert('連線失敗: '+e);}
-  finally{btn.disabled=false;btn.textContent='開始優化';}
+  finally{btn.disabled=false;btn.textContent='開始優化';stopProgress();}
+}
+
+let _progTimer=null;
+function startProgress(t0){
+  const wrap=document.getElementById('progWrap'), bar=document.getElementById('progBar'), txt=document.getElementById('progText');
+  wrap.classList.remove('hidden'); bar.style.width='2%';
+  const slow=(CIRCUITS[circuit].model==='sky130');
+  const poll=async()=>{
+    let p={}; try{p=await (await fetch('/api/progress')).json();}catch(e){}
+    const sec=((Date.now()-t0)/1000).toFixed(0);
+    const pct=p.running?p.pct:Math.min(95,Math.round((Date.now()-t0)/(slow?9000:600)*100));
+    bar.style.width=Math.max(2,pct)+'%';
+    txt.textContent=(p.running?`評估 ${p.evals}/${p.total} 點 · `:'')+`${pct}% · 已耗時 ${sec}s`
+      +(slow?'（sky130 真實模擬，每點 2-3 秒，請耐心等候）':'');
+  };
+  poll(); _progTimer=setInterval(poll,800);
+}
+function stopProgress(){
+  if(_progTimer)clearInterval(_progTimer);_progTimer=null;
+  const bar=document.getElementById('progBar');bar.style.width='100%';
+  setTimeout(()=>document.getElementById('progWrap').classList.add('hidden'),500);
 }
 
 function digits(fmt){const m=/\.(\d)f/.exec(fmt||'');return m?+m[1]:2;}

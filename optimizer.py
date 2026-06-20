@@ -26,6 +26,24 @@ sys.stdout.reconfigure(encoding="utf-8")
 PENALTY = 99999.0
 TOL = 0.005            # 0.5%
 
+# ----------------------------------------------------------------------
+# 優化進度 (供前端進度條輪詢 /api/progress)。單次一個優化, 用模組級 dict 即可。
+# ponytail: 計數器在多線程下有微小 race, 進度條容忍誤差, 不加鎖。
+# ----------------------------------------------------------------------
+PROGRESS = {"evals": 0, "total": 1, "running": False, "circuit": None}
+
+
+def _prog_reset(total, circuit):
+    PROGRESS.update(evals=0, total=max(int(total), 1), running=True, circuit=circuit)
+
+
+def _prog_tick():
+    PROGRESS["evals"] += 1
+
+
+def _prog_done():
+    PROGRESS["running"] = False
+
 
 # ----------------------------------------------------------------------
 # 反相器 Wp/Wn 物理護欄 (電子遷移率 ~2-3x 電洞 -> 對稱反相器需 Wp = 2~3 x Wn)
@@ -73,6 +91,7 @@ def run_vco_optimization(circuit, target=None, max_workers=8):
         return f
 
     def loss(xn):
+        _prog_tick()
         f = sim_freq(xn)
         if f is None or f <= 0:
             trace.append((None,))
@@ -84,6 +103,7 @@ def run_vco_optimization(circuit, target=None, max_workers=8):
     bounds = [(0.0, 1.0)] * len(keys)
     x0_norm = (np.array([c["start"][k] for k in keys]) - lo) / (hi - lo)
 
+    _prog_reset(12 * 4 * len(keys) + 120, circuit)
     # ---- 第一階段: 多變量 DE (多線程平行族群評估) ----
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
         de = differential_evolution(
@@ -98,6 +118,7 @@ def run_vco_optimization(circuit, target=None, max_workers=8):
     if nm.fun < best_L:
         best_x, best_L = nm.x, nm.fun
 
+    _prog_done()
     best_params = _inv_guard(keys, {k: float(v) for k, v in zip(keys, denorm(best_x))}, c["ranges"])
     freq = sim_freq(best_x)
     err_pct = 100 * (freq - tgt) / tgt if freq else 100.0
@@ -182,19 +203,23 @@ def run_multivar(circuit, target=None, workers=8):
     if target is None:
         target = c["target_default"]
     tgt = target * c.get("target_scale", 1.0)
-    is_vco = c["template"].startswith("vco")          # 瞬態慢 -> 小預算
+    is_slow = c.get("flaky", False)                   # sky130 慢瞬態振盪器 -> 小預算 (省時)
 
     def obj(x):
         p = _inv_guard(keys, {k: float(x[i]) for i, k in enumerate(keys)}, c["ranges"])
-        return _mv_loss(circuit, eda.run_isolated(circuit, p, uuid.uuid4().hex[:8]), tgt)
+        L = _mv_loss(circuit, eda.run_isolated(circuit, p, uuid.uuid4().hex[:8]), tgt)
+        _prog_tick()
+        return L
 
-    maxiter, popsize = (6, 4) if is_vco else (25, 12)
+    maxiter, popsize = (6, 4) if is_slow else (25, 12)
+    nm_iter = 40 if is_slow else 120
+    _prog_reset(maxiter * popsize * len(keys) + nm_iter, circuit)
     with ThreadPoolExecutor(max_workers=workers) as ex:
         de = differential_evolution(obj, bounds, maxiter=maxiter, popsize=popsize,
                                     tol=1e-3, seed=1, polish=False,
                                     updating="deferred", workers=ex.map)
     nm = minimize(obj, de.x, method="Nelder-Mead",
-                  options={"maxiter": 40 if is_vco else 120, "fatol": 1e-9, "xatol": 1e-9})
+                  options={"maxiter": nm_iter, "fatol": 1e-9, "xatol": 1e-9})
     bx = nm.x if nm.fun <= de.fun else de.x
     best = _inv_guard(keys, {k: float(np.clip(bx[i], *bounds[i])) for i, k in enumerate(keys)}, c["ranges"])
     ver = eda.run_circuit(circuit, best)
@@ -212,6 +237,7 @@ def run_multivar(circuit, target=None, workers=8):
     multi = {k: [{"spec": c["metric"], "pct": 100 * abs(g[k]) / tot,
                   "sign": "+" if g[k] >= 0 else "-"}] for k in keys}
 
+    _prog_done()
     err = (100 * (prim - tgt) / (abs(tgt) + 1e-12)) if (prim is not None and c["objective"] == "target") else 0.0
     ok = ver.get("ok") and (abs(err) < 1.0 if c["objective"] == "target" else (ver.get("tc") or 99) < 30)
     final = {"params": best, "metrics": {k: ver.get(k) for k in ("gain", "pm", "ugf", "tc", "vref", "freq") if ver.get(k) is not None},
