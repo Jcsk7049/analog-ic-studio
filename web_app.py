@@ -281,7 +281,10 @@ def api_yield():
 @app.route("/api/yield_dnn", methods=["POST"])
 def api_yield_dnn():
     """AI 萬點高速良率預測 (PyTorch 替代模型, 毫秒級)。"""
-    import dl_yield_predictor as dlp
+    try:
+        import dl_yield_predictor as dlp
+    except ImportError:
+        return jsonify({"error": "AI 萬點預測需 PyTorch（雲端版未安裝以縮小體積）；請改用左側 50 點 ngspice 良率評估"}), 200
     data = request.get_json(force=True)
     circuit = data.get("circuit", "opa")
     if circuit not in CIRCUITS:
@@ -338,7 +341,10 @@ def api_pareto():
 @app.route("/api/sweep2d", methods=["POST"])
 def api_sweep2d():
     """雙變數交叉掃描 (20x20=400 多線程) -> 3D 曲面資料 (論文任務一)。"""
-    import analyzer
+    try:
+        import analyzer
+    except ImportError:
+        return jsonify({"error": "3D 曲面分析模組未安裝（雲端版）"}), 200
     data = request.get_json(force=True)
     circuit = data.get("circuit", "opa")
     if circuit not in CIRCUITS:

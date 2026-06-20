@@ -2,3 +2,6 @@ flask
 numpy
 scipy
 matplotlib
+rich
+pandas
+scikit-learn
