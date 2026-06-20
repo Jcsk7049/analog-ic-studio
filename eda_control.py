@@ -355,6 +355,7 @@ CIRCUITS = {
         "objective": "target",
         "metric": "freq",
         "optimizer": "vco_hybrid",          # Scipy 多變量 DE + 局部精調
+        "flaky": True,                      # sky130 瞬態偶有慢尾/非決定性 -> 自動重試
         "target_label": "目標頻率 (GHz)",
         "target_unit": "GHz",
         "target_scale": 1e9,
@@ -399,6 +400,7 @@ CIRCUITS = {
         "optimizer": "multivar",
         "tank_q": 10.0,
         "vdd": 1.8,
+        "flaky": True,
         "target_label": "目標頻率 (GHz)",
         "target_unit": "GHz",
         "target_scale": 1e9,
@@ -480,14 +482,19 @@ def _crashed(log):
 
 
 def run_circuit(circuit, params, dump=False, retries=2):
-    """跑一次模擬。若為瞬態 flaky 崩潰(非確定性無振盪)則自動重試 (sky130 瞬態非決定性)。"""
+    """跑一次模擬。瞬態 flaky 崩潰自動重試。flaky 電路 (sky130 振盪器: meas 抓跨越點
+       具非決定性, 同參數有時量不到 freq) 則只要未成功就重試 (不限 crash 關鍵字)。"""
+    c = CIRCUITS[circuit]
+    flaky = c.get("flaky", False)
     result, log = None, ""
-    for _ in range(retries + 1):
+    for _ in range(retries + (5 if flaky else 1)):
         render_netlist(circuit, params, dump=dump)
-        log = _run_ngspice()
-        result = CIRCUITS[circuit]["parser"](log)
-        if result.get("ok") or not _crashed(log):
-            break                               # 成功, 或確定性失敗(死區) -> 不再重試
+        log = _run_ngspice(timeout=20 if flaky else 8)   # 振盪器瞬態偶有慢尾, 放寬 timeout
+        result = c["parser"](log)
+        if result.get("ok"):
+            break
+        if not flaky and not _crashed(log):
+            break                               # 非 flaky 的確定性失敗(死區) -> 不再重試
     result.update({"circuit": circuit, "params": dict(params)})
     return result
 
