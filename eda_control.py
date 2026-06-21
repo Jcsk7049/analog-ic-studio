@@ -99,10 +99,23 @@ def _parse_bandgap(log):
             "converged": ok, "ok": ok}
 
 
+_MIN_OSC_PP = 0.1          # 穩態峰峰值門檻 (V): 低於此視為未持續振盪 (假振盪)
+
+
 def _parse_ringosc(log):
     freq = _grab(r"^freq\s*=\s*([-\d.eE+]+)", log)
+    # 穩態振幅檢查: meas 可能抓到啟振暫態的跨越點算出 freq, 但實際振盪已衰減 ->
+    # 量穩態視窗峰峰值, 太小則判定假振盪, freq 作廢 (優化器才不會收斂到假解)
+    vmax = _grab(r"^vmax\s*=\s*([-\d.eE+]+)", log)
+    vmin = _grab(r"^vmin\s*=\s*([-\d.eE+]+)", log)
+    pp = (vmax - vmin) if (vmax is not None and vmin is not None) else None
+    sustained = pp is None or pp >= _MIN_OSC_PP
+    if not sustained:
+        freq = None
     ok = freq is not None and freq > 0 and not _bad(log)
     r = {"freq": freq, "converged": ok, "ok": ok}
+    if pp is not None:
+        r["osc_pp"] = pp
     iavg = _grab(r"^iavg\s*=\s*([-\d.eE+]+)", log)        # 相位雜訊用: 電源平均電流
     if iavg is not None:
         r["iavg"] = iavg

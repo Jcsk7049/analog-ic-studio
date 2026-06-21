@@ -49,6 +49,8 @@ Cl3 Vout 0 0.02f
   meas tran t1 when v(Vout)=0.9 td=6n rise=1
   meas tran t2 when v(Vout)=0.9 td=6n rise=6
   let clk_freq = 5 / (t2 - t1)
+  meas tran vmax max v(Vout) from=11n to=15n
+  meas tran vmin min v(Vout) from=11n to=15n
   let freq = clk_freq
   print freq
 

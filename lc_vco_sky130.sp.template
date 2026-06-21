@@ -41,6 +41,8 @@ XMv2 ctrl outn ctrl ctrl sky130_fd_pr__nfet_01v8 L={L_var} W={W_var}
   tran 0.002n 30n uic
   meas tran t1 when v(outp)=v(outn) td=18n rise=1
   meas tran t2 when v(outp)=v(outn) td=18n rise=6
+  meas tran vmax max v(outp) from=16.5n to=22n
+  meas tran vmin min v(outp) from=16.5n to=22n
   let freq = 5 / (t2 - t1)
   print freq
   {DUMP}

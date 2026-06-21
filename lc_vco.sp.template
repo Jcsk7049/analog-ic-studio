@@ -38,6 +38,8 @@ Dv2 ctrl outn VAR
   tran 1p 30n uic
   meas tran t1 when v(outp)=v(outn) td=15n rise=1
   meas tran t2 when v(outp)=v(outn) td=15n rise=6
+  meas tran vmax max v(outp) from=16.5n to=22n
+  meas tran vmin min v(outp) from=16.5n to=22n
   let freq = 5 / (t2 - t1)
   print freq
   {DUMP}

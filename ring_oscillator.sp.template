@@ -20,6 +20,8 @@ Cl3 Vout 0 2f
   tran 2p 30n uic
   meas tran t1 when v(Vout)=0.9 td=10n rise=1
   meas tran t2 when v(Vout)=0.9 td=10n rise=6
+  meas tran vmax max v(Vout) from=16.5n to=22n
+  meas tran vmin min v(Vout) from=16.5n to=22n
   let freq = 5 / (t2 - t1)
   print freq
   {DUMP}
