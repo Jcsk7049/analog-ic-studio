@@ -127,6 +127,41 @@ def analog_optimize(circuit, target=None):
 
 ---
 
+## ⭐ 設計檢查模組(零 token,取代 LLM 算數學)
+
+**這是省 token 的關鍵**:已知拓樸(VCO/OPA/Bandgap)的數值分析改用程式算,不丟 LLM。
+四個單檔、只用 `math`、無任何相依,可直接放進你的專案 import:
+
+| 檔案 | 功能 |
+|------|------|
+| `design_check.py` | **統一入口** `analyze(topology, params, spec)` → 自動分流 |
+| `vco_calc.py` | LC-VCO:f0/FTR/KVCO/起振餘裕/相位雜訊/FoM + Mohan 電感換算 |
+| `opa_calc.py` | 兩級米勒 OPA:增益/GBW/相位裕度/壓擺率/擺幅 |
+| `bandgap_calc.py` | 帶隙:Vref/TC + 找零溫漂最佳 (R3/R1)·ln(N) |
+
+**用法**(AI 讀完圖萃取參數後,交給程式算與糾錯):
+```python
+from design_check import analyze
+
+# topology: "vco" / "opa" / "bandgap"(別名見 design_check.supported())
+r = analyze("opa",
+            {"Itail_A": 20e-6, "Id6_A": 60e-6, "Cc_F": 2e-12, "CL_F": 5e-12},
+            {"gain_dB_min": 60, "pm_deg_min": 60})
+
+# r["metrics"]  -> 所有算好的性能數字
+# r["findings"] -> [{level:"ok|warn|error", item, msg, suggest}]
+#                  level=error 的就是「這參數錯了 → 該調到多少」
+# r["ok"]       -> 是否無 error
+```
+
+`findings` 的 `suggest` 會給**具體目標值**,例如:
+- OPA PM 不足 → 「把 gm6 提高至 ≥X mS,或加大 Cc」
+- Bandgap TC 超標 → 「升 R3/R1 至 ≈8.93(目前 5.00)」
+- VCO 起振餘裕 <1 → 「需 gm ≥ X mS:加大交叉耦合 W 或偏壓 Id」
+
+→ LLM 只負責「讀圖 → 參數」與「把 findings 寫成建議文字」,**數學與糾錯全 0 token、且精確**。
+（這些 calc 模組全在本機算,**不外送任何 PDK 機密**,也避開 NDA 風險。）
+
 ## 想要的話可加的端點(目前沒有,需要再說)
 
 - `POST /api/simulate {circuit, params}`:給任意 W/L → 直接回指標(讓你的 AI 自己提參數、本平台只當「裁判」評分)。目前只有 target 驅動的 `/api/optimize`,若你的 AI 要自己提案 W/L,我可以加這顆。
