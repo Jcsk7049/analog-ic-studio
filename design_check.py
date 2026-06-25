@@ -18,14 +18,16 @@ design_check.py — 類比設計檢查統一入口(零相依,零 token)
 from vco_calc import analyze_lc_vco
 from opa_calc import analyze_two_stage_opa
 from bandgap_calc import analyze_bandgap
+from ring_calc import analyze_ring_vco
 
-_VCO = {"vco", "lc-vco", "lcvco", "lc_vco", "oscillator"}
+_VCO = {"vco", "lc-vco", "lcvco", "lc_vco"}
+_RING = {"ring", "ring-vco", "ringvco", "ring_vco", "ro", "ring_oscillator"}
 _OPA = {"opa", "opamp", "op-amp", "two-stage-opa", "amplifier"}
 _BG = {"bandgap", "bg", "reference", "bgr", "vref"}
 
 
 def supported():
-    return {"vco": sorted(_VCO), "opa": sorted(_OPA), "bandgap": sorted(_BG)}
+    return {"vco": sorted(_VCO), "ring": sorted(_RING), "opa": sorted(_OPA), "bandgap": sorted(_BG)}
 
 
 def analyze(topology, params, spec=None):
@@ -33,11 +35,13 @@ def analyze(topology, params, spec=None):
     t = (topology or "").strip().lower()
     if t in _VCO:
         return analyze_lc_vco(params, spec)
+    if t in _RING:
+        return analyze_ring_vco(params, spec)
     if t in _OPA:
         return analyze_two_stage_opa(params, spec)
     if t in _BG:
         return analyze_bandgap(params, spec)
-    return {"error": f"未知拓樸 '{topology}';支援: vco / opa / bandgap",
+    return {"error": f"未知拓樸 '{topology}';支援: vco / ring / opa / bandgap",
             "supported": supported()}
 
 
